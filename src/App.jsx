@@ -550,12 +550,6 @@ function applyInkBleed(imageData, amount, roughness = 0.5) {
   // Higher roughness = more irregular/random spread
   const baseProb = 0.3 + amount * 0.5; // 0.3 to 0.8 range
   
-  // Helper to check if a pixel is "ink" (dark)
-  const isInk = (i) => {
-    const gray = original[i] * 0.299 + original[i + 1] * 0.587 + original[i + 2] * 0.114;
-    return gray < 128;
-  };
-  
   // Run multiple dilation passes
   for (let pass = 0; pass < passes; pass++) {
     // Use result from previous pass as the new "original" for this pass
@@ -855,7 +849,7 @@ function Button({ children, onClick, primary = false, active = false, small = fa
 }
 
 // Color Swatch
-function ColorSwatch({ colorKey, color, selected, onClick }) {
+function ColorSwatch({ color, selected, onClick }) {
   const [hovering, setHovering] = useState(false);
   
   return (
@@ -1008,7 +1002,7 @@ function AlgorithmSelect({ value, onChange, includeNone = false }) {
           {Object.entries(DITHER_ALGORITHMS).filter(([,v]) => v.category === 'halftone').map(([k, v]) => <option key={k} value={k}>{v.name}</option>)}
         </optgroup>
         <optgroup label="ORDERED">
-          {Object.entries(DITHER_ALGORITHMS).filter(([k,v]) => v.category === 'ordered').map(([k, v]) => <option key={k} value={k}>{v.name}</option>)}
+          {Object.entries(DITHER_ALGORITHMS).filter(([,v]) => v.category === 'ordered').map(([k, v]) => <option key={k} value={k}>{v.name}</option>)}
         </optgroup>
         <optgroup label="DIFFUSION">
           {Object.entries(DITHER_ALGORITHMS).filter(([,v]) => v.category === 'diffusion').map(([k, v]) => <option key={k} value={k}>{v.name}</option>)}
