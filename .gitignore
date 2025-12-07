@@ -39,3 +39,8 @@ coverage/
 
 # Misc
 *.log
+node_modules/
+dist/
+build/
+.next/
+.DS_Store
