@@ -448,3 +448,4 @@ export const blendModes = {
   lighten: (base, blend, alpha) => Math.max(base, blend) * alpha + base * (1 - alpha),
 };
 
+

@@ -192,3 +192,4 @@ export function applyGradientMap(imageData, gradientColors) {
   return new ImageData(data, imageData.width, imageData.height);
 }
 
+

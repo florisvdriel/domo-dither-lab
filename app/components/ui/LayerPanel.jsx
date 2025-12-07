@@ -106,3 +106,4 @@ export default function LayerPanel({ layer, index, totalLayers, onUpdate, onRemo
   );
 }
 
+

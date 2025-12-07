@@ -34,3 +34,4 @@ export function getGray(data, i) {
   return (data[i] * GRAY_R + data[i+1] * GRAY_G + data[i+2] * GRAY_B) * GRAY_INV;
 }
 
+

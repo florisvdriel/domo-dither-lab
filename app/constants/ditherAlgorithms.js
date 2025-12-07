@@ -12,3 +12,4 @@ export const DITHER_ALGORITHMS = {
   noise: { name: 'NOISE/STIPPLE', category: 'other', hasScale: true, hasAngle: false, description: 'Random stipple pattern, organic texture' },
 };
 
+

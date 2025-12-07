@@ -111,3 +111,4 @@ export default function ComparisonSlider({ position, onChange }) {
   );
 }
 
+

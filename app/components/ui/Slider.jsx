@@ -72,3 +72,4 @@ export default function Slider({ value, min, max, step, onChange, label }) {
   );
 }
 
+
