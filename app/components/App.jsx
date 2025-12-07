@@ -1,4 +1,6 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+'use client';
+
+import React, { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react';
 
 // Domo Color Palette
 const DOMO_PALETTE = {
@@ -96,6 +98,15 @@ const PRESETS = {
     ditherScale: 6,
     ditherAngle: 15,
     ditherThreshold: 0.5
+  },
+  rgbSplit: {
+    name: 'RGB SPLIT',
+    description: 'Chromatic aberration effect',
+    layers: [
+      { colorKey: 'festival', ditherType: 'halftoneCircle', threshold: 0.5, scale: 6, angle: 15, offsetX: -5, offsetY: 0, blendMode: 'screen', opacity: 1, visible: true },
+      { colorKey: 'rooted', ditherType: 'halftoneCircle', threshold: 0.5, scale: 6, angle: 15, offsetX: 0, offsetY: 0, blendMode: 'screen', opacity: 1, visible: true },
+      { colorKey: 'horizon', ditherType: 'halftoneCircle', threshold: 0.5, scale: 6, angle: 15, offsetX: 5, offsetY: 0, blendMode: 'screen', opacity: 1, visible: true }
+    ]
   }
 };
 
@@ -105,6 +116,7 @@ const DEFAULT_STATE = {
   brightness: 0,
   contrast: 0,
   invert: false,
+  preBlur: 0,
   inkBleed: false,
   inkBleedAmount: 0.5,
   inkBleedRoughness: 0.5,
@@ -117,9 +129,9 @@ const DEFAULT_STATE = {
   gradientDitherThreshold: 0.5,
   backgroundColor: '#ffffff',
   exportResolution: '1x',
-  zoom: 1,
-  panX: 0,
-  panY: 0,
+  viewportSize: { w: 1080, h: 1080 },
+  imageTransform: { x: 0, y: 0, scale: 1 },
+  showBackground: true,
   layers: [
     { id: 1, colorKey: 'hearth', ditherType: 'halftoneCircle', threshold: 0.5, scale: 8, angle: 15, offsetX: 0, offsetY: 0, blendMode: 'multiply', opacity: 1, visible: true }
   ]
@@ -148,6 +160,17 @@ const BAYER_2x2 = [[0,2],[3,1]].map(r => r.map(v => v/4));
 const BAYER_4x4 = [[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]].map(r => r.map(v => v/16));
 const BAYER_8x8 = [[0,32,8,40,2,34,10,42],[48,16,56,24,50,18,58,26],[12,44,4,36,14,46,6,38],[60,28,52,20,62,30,54,22],[3,35,11,43,1,33,9,41],[51,19,59,27,49,17,57,25],[15,47,7,39,13,45,5,37],[63,31,55,23,61,29,53,21]].map(r => r.map(v => v/64));
 
+// Optimized grayscale calculation constants
+const GRAY_R = 0.299;
+const GRAY_G = 0.587;
+const GRAY_B = 0.114;
+const GRAY_INV = 1 / 255;
+
+// Helper to calculate grayscale (optimized)
+function getGray(data, i) {
+  return (data[i] * GRAY_R + data[i+1] * GRAY_G + data[i+2] * GRAY_B) * GRAY_INV;
+}
+
 // Dithering Algorithms
 const ditherAlgorithms = {
   none: (imageData) => imageData,
@@ -159,12 +182,15 @@ const ditherAlgorithms = {
     const size = 2;
     const thresholdOffset = (threshold - 0.5) * 0.8;
     const pixelScale = Math.max(1, Math.floor(scale));
+    const invPixelScale = 1 / pixelScale;
+    
     for (let y = 0; y < h; y++) {
+      const yw = y * w;
+      const my = Math.floor(y * invPixelScale) % size;
       for (let x = 0; x < w; x++) {
-        const i = (y * w + x) * 4;
-        const gray = (data[i] * 0.299 + data[i+1] * 0.587 + data[i+2] * 0.114) / 255;
-        const mx = Math.floor(x / pixelScale) % size;
-        const my = Math.floor(y / pixelScale) % size;
+        const i = (yw + x) * 4;
+        const gray = getGray(data, i);
+        const mx = Math.floor(x * invPixelScale) % size;
         const result = gray > (matrix[my][mx] + thresholdOffset) ? 255 : 0;
         data[i] = data[i+1] = data[i+2] = result;
       }
@@ -179,12 +205,15 @@ const ditherAlgorithms = {
     const size = 4;
     const thresholdOffset = (threshold - 0.5) * 0.8;
     const pixelScale = Math.max(1, Math.floor(scale));
+    const invPixelScale = 1 / pixelScale;
+    
     for (let y = 0; y < h; y++) {
+      const yw = y * w;
+      const my = Math.floor(y * invPixelScale) % size;
       for (let x = 0; x < w; x++) {
-        const i = (y * w + x) * 4;
-        const gray = (data[i] * 0.299 + data[i+1] * 0.587 + data[i+2] * 0.114) / 255;
-        const mx = Math.floor(x / pixelScale) % size;
-        const my = Math.floor(y / pixelScale) % size;
+        const i = (yw + x) * 4;
+        const gray = getGray(data, i);
+        const mx = Math.floor(x * invPixelScale) % size;
         const result = gray > (matrix[my][mx] + thresholdOffset) ? 255 : 0;
         data[i] = data[i+1] = data[i+2] = result;
       }
@@ -199,12 +228,15 @@ const ditherAlgorithms = {
     const size = 8;
     const thresholdOffset = (threshold - 0.5) * 0.8;
     const pixelScale = Math.max(1, Math.floor(scale));
+    const invPixelScale = 1 / pixelScale;
+    
     for (let y = 0; y < h; y++) {
+      const yw = y * w;
+      const my = Math.floor(y * invPixelScale) % size;
       for (let x = 0; x < w; x++) {
-        const i = (y * w + x) * 4;
-        const gray = (data[i] * 0.299 + data[i+1] * 0.587 + data[i+2] * 0.114) / 255;
-        const mx = Math.floor(x / pixelScale) % size;
-        const my = Math.floor(y / pixelScale) % size;
+        const i = (yw + x) * 4;
+        const gray = getGray(data, i);
+        const mx = Math.floor(x * invPixelScale) % size;
         const result = gray > (matrix[my][mx] + thresholdOffset) ? 255 : 0;
         data[i] = data[i+1] = data[i+2] = result;
       }
@@ -217,47 +249,65 @@ const ditherAlgorithms = {
     const w = imageData.width, h = imageData.height;
     const pixelScale = Math.max(1, Math.floor(scale));
     const thresh = 80 + threshold * 100;
+    const invPixelScale = 1 / pixelScale;
     
-    const sw = Math.ceil(w / pixelScale);
-    const sh = Math.ceil(h / pixelScale);
+    const sw = Math.ceil(w * invPixelScale);
+    const sh = Math.ceil(h * invPixelScale);
     const gray = new Float32Array(sw * sh);
     
+    // Pre-calculate pixel bounds for sampling
     for (let sy = 0; sy < sh; sy++) {
+      const syStart = sy * pixelScale;
+      const syEnd = Math.min(syStart + pixelScale, h);
+      const syw = sy * sw;
       for (let sx = 0; sx < sw; sx++) {
+        const sxStart = sx * pixelScale;
+        const sxEnd = Math.min(sxStart + pixelScale, w);
         let sum = 0, count = 0;
-        for (let dy = 0; dy < pixelScale && sy * pixelScale + dy < h; dy++) {
-          for (let dx = 0; dx < pixelScale && sx * pixelScale + dx < w; dx++) {
-            const idx = ((sy * pixelScale + dy) * w + (sx * pixelScale + dx)) * 4;
-            sum += data[idx] * 0.299 + data[idx+1] * 0.587 + data[idx+2] * 0.114;
+        for (let dy = syStart; dy < syEnd; dy++) {
+          const dyw = dy * w;
+          for (let dx = sxStart; dx < sxEnd; dx++) {
+            const idx = (dyw + dx) * 4;
+            sum += data[idx] * GRAY_R + data[idx+1] * GRAY_G + data[idx+2] * GRAY_B;
             count++;
           }
         }
-        gray[sy * sw + sx] = sum / count;
+        gray[syw + sx] = count > 0 ? sum / count : 0;
       }
     }
     
+    // Error diffusion
+    const error7_16 = 7 / 16;
+    const error3_16 = 3 / 16;
+    const error5_16 = 5 / 16;
+    const error1_16 = 1 / 16;
+    
     for (let y = 0; y < sh; y++) {
+      const yw = y * sw;
       for (let x = 0; x < sw; x++) {
-        const i = y * sw + x;
+        const i = yw + x;
         const oldPixel = gray[i];
         const newPixel = oldPixel > thresh ? 255 : 0;
         gray[i] = newPixel;
         const error = oldPixel - newPixel;
-        if (x + 1 < sw) gray[i + 1] += error * 7 / 16;
+        if (x + 1 < sw) gray[i + 1] += error * error7_16;
         if (y + 1 < sh) {
-          if (x > 0) gray[i + sw - 1] += error * 3 / 16;
-          gray[i + sw] += error * 5 / 16;
-          if (x + 1 < sw) gray[i + sw + 1] += error * 1 / 16;
+          const nextRow = i + sw;
+          if (x > 0) gray[nextRow - 1] += error * error3_16;
+          gray[nextRow] += error * error5_16;
+          if (x + 1 < sw) gray[nextRow + 1] += error * error1_16;
         }
       }
     }
     
+    // Map back to full resolution
     for (let y = 0; y < h; y++) {
+      const sy = Math.floor(y * invPixelScale);
+      const yw = y * w;
       for (let x = 0; x < w; x++) {
-        const sx = Math.floor(x / pixelScale);
-        const sy = Math.floor(y / pixelScale);
+        const sx = Math.floor(x * invPixelScale);
         const val = gray[sy * sw + sx] > 127 ? 255 : 0;
-        const idx = (y * w + x) * 4;
+        const idx = (yw + x) * 4;
         data[idx] = data[idx+1] = data[idx+2] = val;
       }
     }
@@ -269,49 +319,63 @@ const ditherAlgorithms = {
     const w = imageData.width, h = imageData.height;
     const pixelScale = Math.max(1, Math.floor(scale));
     const thresh = 80 + threshold * 100;
+    const invPixelScale = 1 / pixelScale;
     
-    const sw = Math.ceil(w / pixelScale);
-    const sh = Math.ceil(h / pixelScale);
+    const sw = Math.ceil(w * invPixelScale);
+    const sh = Math.ceil(h * invPixelScale);
     const gray = new Float32Array(sw * sh);
     
+    // Pre-calculate pixel bounds for sampling
     for (let sy = 0; sy < sh; sy++) {
+      const syStart = sy * pixelScale;
+      const syEnd = Math.min(syStart + pixelScale, h);
+      const syw = sy * sw;
       for (let sx = 0; sx < sw; sx++) {
+        const sxStart = sx * pixelScale;
+        const sxEnd = Math.min(sxStart + pixelScale, w);
         let sum = 0, count = 0;
-        for (let dy = 0; dy < pixelScale && sy * pixelScale + dy < h; dy++) {
-          for (let dx = 0; dx < pixelScale && sx * pixelScale + dx < w; dx++) {
-            const idx = ((sy * pixelScale + dy) * w + (sx * pixelScale + dx)) * 4;
-            sum += data[idx] * 0.299 + data[idx+1] * 0.587 + data[idx+2] * 0.114;
+        for (let dy = syStart; dy < syEnd; dy++) {
+          const dyw = dy * w;
+          for (let dx = sxStart; dx < sxEnd; dx++) {
+            const idx = (dyw + dx) * 4;
+            sum += data[idx] * GRAY_R + data[idx+1] * GRAY_G + data[idx+2] * GRAY_B;
             count++;
           }
         }
-        gray[sy * sw + sx] = sum / count;
+        gray[syw + sx] = count > 0 ? sum / count : 0;
       }
     }
     
+    // Error diffusion (Atkinson)
+    const errorDiv = 1 / 8;
     for (let y = 0; y < sh; y++) {
+      const yw = y * sw;
       for (let x = 0; x < sw; x++) {
-        const i = y * sw + x;
+        const i = yw + x;
         const oldPixel = gray[i];
         const newPixel = oldPixel > thresh ? 255 : 0;
         gray[i] = newPixel;
-        const error = (oldPixel - newPixel) / 8;
+        const error = (oldPixel - newPixel) * errorDiv;
         if (x + 1 < sw) gray[i + 1] += error;
         if (x + 2 < sw) gray[i + 2] += error;
         if (y + 1 < sh) {
-          if (x > 0) gray[i + sw - 1] += error;
-          gray[i + sw] += error;
-          if (x + 1 < sw) gray[i + sw + 1] += error;
+          const nextRow = i + sw;
+          if (x > 0) gray[nextRow - 1] += error;
+          gray[nextRow] += error;
+          if (x + 1 < sw) gray[nextRow + 1] += error;
         }
         if (y + 2 < sh) gray[i + sw * 2] += error;
       }
     }
     
+    // Map back to full resolution
     for (let y = 0; y < h; y++) {
+      const sy = Math.floor(y * invPixelScale);
+      const yw = y * w;
       for (let x = 0; x < w; x++) {
-        const sx = Math.floor(x / pixelScale);
-        const sy = Math.floor(y / pixelScale);
+        const sx = Math.floor(x * invPixelScale);
         const val = gray[sy * sw + sx] > 127 ? 255 : 0;
-        const idx = (y * w + x) * 4;
+        const idx = (yw + x) * 4;
         data[idx] = data[idx+1] = data[idx+2] = val;
       }
     }
@@ -325,46 +389,69 @@ const ditherAlgorithms = {
     
     const step = Math.max(3, Math.floor(dotSize));
     const maxRadius = step * 0.48;
-    const rad = (angle * Math.PI) / 180;
+    const rad = (angle * Math.PI) * (1 / 180);
     const cos = Math.cos(rad), sin = Math.sin(rad);
+    const radiusMultiplier = maxRadius * (0.6 + threshold * 0.7);
+    const radiusThreshold = 0.5;
+    const radiusPadding = 0.7;
+    const wHalf = w * 0.5;
+    const hHalf = h * 0.5;
     
+    // Calculate grid bounds more efficiently
     const gridExtent = Math.max(w, h) * 2;
+    const gridStart = -gridExtent;
+    const gridEnd = gridExtent;
     
-    for (let gy = -gridExtent; gy < gridExtent; gy += step) {
-      for (let gx = -gridExtent; gx < gridExtent; gx += step) {
-        const cx = gx * cos - gy * sin + w / 2;
-        const cy = gx * sin + gy * cos + h / 2;
+    // Pre-calculate bounds for grid iteration
+    const minGridX = Math.floor((gridStart - wHalf) / step) * step;
+    const maxGridX = Math.ceil((gridEnd - wHalf) / step) * step;
+    const minGridY = Math.floor((gridStart - hHalf) / step) * step;
+    const maxGridY = Math.ceil((gridEnd - hHalf) / step) * step;
+    
+    for (let gy = minGridY; gy <= maxGridY; gy += step) {
+      for (let gx = minGridX; gx <= maxGridX; gx += step) {
+        const cx = gx * cos - gy * sin + wHalf;
+        const cy = gx * sin + gy * cos + hHalf;
         
+        // Early bounds check
         if (cx < -step || cx >= w + step || cy < -step || cy >= h + step) continue;
         
         const sampleX = Math.max(0, Math.min(w - 1, Math.round(cx)));
         const sampleY = Math.max(0, Math.min(h - 1, Math.round(cy)));
         const si = (sampleY * w + sampleX) * 4;
-        const gray = (imageData.data[si] * 0.299 + imageData.data[si+1] * 0.587 + imageData.data[si+2] * 0.114) / 255;
+        const gray = getGray(imageData.data, si);
         
         const darkness = 1 - gray;
-        const radius = Math.sqrt(darkness) * maxRadius * (0.6 + threshold * 0.7);
+        const radius = Math.sqrt(darkness) * radiusMultiplier;
         
-        if (radius < 0.5) continue;
+        if (radius < radiusThreshold) continue;
         
-        const minX = Math.max(0, Math.floor(cx - radius - 1));
-        const maxX = Math.min(w - 1, Math.ceil(cx + radius + 1));
-        const minY = Math.max(0, Math.floor(cy - radius - 1));
-        const maxY = Math.min(h - 1, Math.ceil(cy + radius + 1));
+        const radiusWithPadding = radius + radiusPadding;
+        const minX = Math.max(0, Math.floor(cx - radiusWithPadding));
+        const maxX = Math.min(w - 1, Math.ceil(cx + radiusWithPadding));
+        const minY = Math.max(0, Math.floor(cy - radiusWithPadding));
+        const maxY = Math.min(h - 1, Math.ceil(cy + radiusWithPadding));
+        
+        // Pre-calculate radius squared to avoid sqrt in inner loop
+        const radiusSq = radiusWithPadding * radiusWithPadding;
         
         for (let py = minY; py <= maxY; py++) {
+          const dy = py - cy;
+          const dySq = dy * dy;
+          const pyw = py * w;
           for (let px = minX; px <= maxX; px++) {
             const dx = px - cx;
-            const dy = py - cy;
-            const dist = Math.sqrt(dx * dx + dy * dy);
+            const distSq = dx * dx + dySq;
             
-            if (dist <= radius + 0.7) {
-              const i = (py * w + px) * 4;
-              const coverage = Math.max(0, Math.min(1, radius - dist + 0.7));
+            if (distSq <= radiusSq) {
+              const dist = Math.sqrt(distSq);
+              const i = (pyw + px) * 4;
+              const coverage = Math.max(0, Math.min(1, radius - dist + radiusPadding));
               const newVal = Math.round(255 * (1 - coverage));
-              data[i] = Math.min(data[i], newVal);
-              data[i+1] = Math.min(data[i+1], newVal);
-              data[i+2] = Math.min(data[i+2], newVal);
+              const current = data[i];
+              if (newVal < current) {
+                data[i] = data[i+1] = data[i+2] = newVal;
+              }
             }
           }
         }
@@ -378,27 +465,32 @@ const ditherAlgorithms = {
     const w = imageData.width, h = imageData.height;
     data.fill(255);
     
-    const rad = (angle * Math.PI) / 180;
+    const rad = (angle * Math.PI) * (1 / 180);
     const cos = Math.cos(rad), sin = Math.sin(rad);
     const spacing = Math.max(3, lineSpacing);
     const maxWidth = spacing * 0.7;
+    const widthMultiplier = maxWidth * (0.5 + threshold * 0.7);
+    const spacingHalf = spacing * 0.5;
+    const padding = 0.7;
     
     for (let y = 0; y < h; y++) {
+      const yw = y * w;
+      const ySin = y * sin;
       for (let x = 0; x < w; x++) {
-        const i = (y * w + x) * 4;
-        const gray = (imageData.data[i] * 0.299 + imageData.data[i+1] * 0.587 + imageData.data[i+2] * 0.114) / 255;
+        const i = (yw + x) * 4;
+        const gray = getGray(imageData.data, i);
         
-        const rx = x * cos + y * sin;
-        
+        const rx = x * cos + ySin;
         const linePos = ((rx % spacing) + spacing) % spacing;
-        const centerDist = Math.abs(linePos - spacing / 2);
+        const centerDist = Math.abs(linePos - spacingHalf);
         
         const darkness = 1 - gray;
-        const lineWidth = Math.sqrt(darkness) * maxWidth * (0.5 + threshold * 0.7);
-        const halfWidth = lineWidth / 2;
+        const lineWidth = Math.sqrt(darkness) * widthMultiplier;
+        const halfWidth = lineWidth * 0.5;
+        const thresholdDist = halfWidth + padding;
         
-        if (centerDist <= halfWidth + 0.7) {
-          const coverage = Math.max(0, Math.min(1, halfWidth - centerDist + 0.7));
+        if (centerDist <= thresholdDist) {
+          const coverage = Math.max(0, Math.min(1, halfWidth - centerDist + padding));
           const val = Math.round(255 * (1 - coverage));
           data[i] = data[i+1] = data[i+2] = val;
         }
@@ -414,25 +506,33 @@ const ditherAlgorithms = {
     
     const step = Math.max(3, Math.floor(size));
     const maxSize = step * 0.85;
-    const rad = (angle * Math.PI) / 180;
+    const rad = (angle * Math.PI) * (1 / 180);
     const cos = Math.cos(rad), sin = Math.sin(rad);
+    const sizeMultiplier = maxSize * (0.4 + threshold * 0.6) * 0.5;
+    const padding = 0.7;
+    const wHalf = w * 0.5;
+    const hHalf = h * 0.5;
     
     const gridExtent = Math.max(w, h) * 2;
+    const minGridX = Math.floor((gridExtent - wHalf) / step) * step;
+    const maxGridX = Math.ceil((gridExtent - wHalf) / step) * step;
+    const minGridY = Math.floor((gridExtent - hHalf) / step) * step;
+    const maxGridY = Math.ceil((gridExtent - hHalf) / step) * step;
     
-    for (let gy = -gridExtent; gy < gridExtent; gy += step) {
-      for (let gx = -gridExtent; gx < gridExtent; gx += step) {
-        const cx = gx * cos - gy * sin + w / 2;
-        const cy = gx * sin + gy * cos + h / 2;
+    for (let gy = minGridY; gy <= maxGridY; gy += step) {
+      for (let gx = minGridX; gx <= maxGridX; gx += step) {
+        const cx = gx * cos - gy * sin + wHalf;
+        const cy = gx * sin + gy * cos + hHalf;
         
         if (cx < -step || cx >= w + step || cy < -step || cy >= h + step) continue;
         
         const sampleX = Math.max(0, Math.min(w - 1, Math.round(cx)));
         const sampleY = Math.max(0, Math.min(h - 1, Math.round(cy)));
         const si = (sampleY * w + sampleX) * 4;
-        const gray = (imageData.data[si] * 0.299 + imageData.data[si+1] * 0.587 + imageData.data[si+2] * 0.114) / 255;
+        const gray = getGray(imageData.data, si);
         
         const darkness = 1 - gray;
-        const squareHalf = Math.sqrt(darkness) * maxSize * (0.4 + threshold * 0.6) / 2;
+        const squareHalf = Math.sqrt(darkness) * sizeMultiplier;
         
         if (squareHalf < 0.3) continue;
         
@@ -442,24 +542,31 @@ const ditherAlgorithms = {
         const minY = Math.max(0, Math.floor(cy - extent));
         const maxY = Math.min(h - 1, Math.ceil(cy + extent));
         
+        // Pre-calculate rotated basis vectors
+        const negSin = -sin;
+        
         for (let py = minY; py <= maxY; py++) {
+          const dy = py - cy;
+          const dyCos = dy * cos;
+          const dySin = dy * sin;
+          const pyw = py * w;
           for (let px = minX; px <= maxX; px++) {
             const dx = px - cx;
-            const dy = py - cy;
-            const rdx = dx * cos + dy * sin;
-            const rdy = -dx * sin + dy * cos;
+            const rdx = dx * cos + dySin;
+            const rdy = dx * negSin + dyCos;
             
             const distX = Math.abs(rdx) - squareHalf;
             const distY = Math.abs(rdy) - squareHalf;
             const dist = Math.max(distX, distY);
             
-            if (dist < 0.7) {
-              const i = (py * w + px) * 4;
-              const coverage = Math.max(0, Math.min(1, -dist + 0.7));
+            if (dist < padding) {
+              const i = (pyw + px) * 4;
+              const coverage = Math.max(0, Math.min(1, -dist + padding));
               const newVal = Math.round(255 * (1 - coverage));
-              data[i] = Math.min(data[i], newVal);
-              data[i+1] = Math.min(data[i+1], newVal);
-              data[i+2] = Math.min(data[i+2], newVal);
+              const current = data[i];
+              if (newVal < current) {
+                data[i] = data[i+1] = data[i+2] = newVal;
+              }
             }
           }
         }
@@ -474,14 +581,17 @@ const ditherAlgorithms = {
     const pixelScale = Math.max(1, Math.floor(scale));
     const decisionThreshold = 0.3 + (1 - threshold) * 0.4;
     const noiseAmount = 0.25;
+    const invPixelScale = 1 / pixelScale;
+    const sw = Math.ceil(w * invPixelScale);
     
     for (let y = 0; y < h; y++) {
+      const sy = Math.floor(y * invPixelScale);
+      const yw = y * w;
       for (let x = 0; x < w; x++) {
-        const i = (y * w + x) * 4;
-        const gray = (data[i] * 0.299 + data[i+1] * 0.587 + data[i+2] * 0.114) / 255;
-        const sx = Math.floor(x / pixelScale);
-        const sy = Math.floor(y / pixelScale);
-        const noise = seededRandom(sy * Math.ceil(w / pixelScale) + sx + 0.5);
+        const i = (yw + x) * 4;
+        const gray = getGray(data, i);
+        const sx = Math.floor(x * invPixelScale);
+        const noise = seededRandom(sy * sw + sx + 0.5);
         const adjustedThreshold = decisionThreshold + (noise - 0.5) * noiseAmount;
         const result = gray > adjustedThreshold ? 255 : 0;
         data[i] = data[i+1] = data[i+2] = result;
@@ -504,23 +614,28 @@ const blendModes = {
   lighten: (base, blend, alpha) => Math.max(base, blend) * alpha + base * (1 - alpha),
 };
 
-// Apply brightness and contrast
+// Apply brightness and contrast (optimized)
 function applyBrightnessContrast(imageData, brightness, contrast) {
   const data = new Uint8ClampedArray(imageData.data);
+  const len = data.length;
+  const brightnessOffset = brightness * 255;
   const factor = (259 * (contrast * 255 + 255)) / (255 * (259 - contrast * 255));
+  const factor128 = factor * 128;
+  const oneMinusFactor = 1 - factor;
   
-  for (let i = 0; i < data.length; i += 4) {
-    let r = data[i] + brightness * 255;
-    let g = data[i + 1] + brightness * 255;
-    let b = data[i + 2] + brightness * 255;
+  for (let i = 0; i < len; i += 4) {
+    let r = data[i] + brightnessOffset;
+    let g = data[i + 1] + brightnessOffset;
+    let b = data[i + 2] + brightnessOffset;
     
-    r = factor * (r - 128) + 128;
-    g = factor * (g - 128) + 128;
-    b = factor * (b - 128) + 128;
+    r = factor * r + oneMinusFactor * 128;
+    g = factor * g + oneMinusFactor * 128;
+    b = factor * b + oneMinusFactor * 128;
     
-    data[i] = Math.max(0, Math.min(255, r));
-    data[i + 1] = Math.max(0, Math.min(255, g));
-    data[i + 2] = Math.max(0, Math.min(255, b));
+    // Clamp using bitwise operations where possible
+    data[i] = r < 0 ? 0 : (r > 255 ? 255 : r);
+    data[i + 1] = g < 0 ? 0 : (g > 255 ? 255 : g);
+    data[i + 2] = b < 0 ? 0 : (b > 255 ? 255 : b);
   }
   
   return new ImageData(data, imageData.width, imageData.height);
@@ -537,11 +652,12 @@ function invertImageData(imageData) {
   return new ImageData(data, imageData.width, imageData.height);
 }
 
-// Ink bleed effect - simulates capillary action via randomized dilation (fiber spread)
+// Ink bleed effect - simulates capillary action via randomized dilation (fiber spread) - optimized
 function applyInkBleed(imageData, amount, roughness = 0.5) {
   const w = imageData.width, h = imageData.height;
   const original = new Uint8ClampedArray(imageData.data); // Read-only copy
   const result = new Uint8ClampedArray(imageData.data);   // Output buffer
+  const len = original.length;
   
   // Number of dilation passes based on amount (1-3 passes)
   const passes = Math.max(1, Math.round(amount * 3));
@@ -549,60 +665,100 @@ function applyInkBleed(imageData, amount, roughness = 0.5) {
   // Probability of a white pixel bleeding based on amount and roughness
   // Higher roughness = more irregular/random spread
   const baseProb = 0.3 + amount * 0.5; // 0.3 to 0.8 range
+  const roughnessFactor = 1 - roughness * 0.5;
+  const bleedOpacity = 0.9;
+  const oneMinusBleedOpacity = 1 - bleedOpacity;
+  const paperThreshold = 128;
+  const paperThresholdScaled = paperThreshold * 255; // For comparison with unscaled gray
+  
+  // Pre-calculate neighbor offsets
+  const neighborOffsets = [
+    -w * 4,  // Up
+    w * 4,   // Down
+    -4,      // Left
+    4        // Right
+  ];
   
   // Run multiple dilation passes
   for (let pass = 0; pass < passes; pass++) {
     // Use result from previous pass as the new "original" for this pass
     if (pass > 0) {
-      for (let i = 0; i < original.length; i++) {
-        original[i] = result[i];
-      }
+      original.set(result);
     }
     
     // Iterate through every pixel
     for (let y = 0; y < h; y++) {
+      const yw = y * w;
+      const yw4 = yw * 4;
       for (let x = 0; x < w; x++) {
-        const i = (y * w + x) * 4;
+        const i = yw4 + x * 4;
         
-        // Check if current pixel is white (paper)
-        const gray = original[i] * 0.299 + original[i + 1] * 0.587 + original[i + 2] * 0.114;
-        const isPaper = gray >= 128;
+        // Check if current pixel is white (paper) - optimized gray calculation
+        const gray = original[i] * GRAY_R + original[i + 1] * GRAY_G + original[i + 2] * GRAY_B;
+        const isPaper = gray >= paperThresholdScaled;
         
         if (isPaper) {
-          // Check 4 neighbors (Up, Down, Left, Right)
-          const neighbors = [
-            [x, y - 1], // Up
-            [x, y + 1], // Down
-            [x - 1, y], // Left
-            [x + 1, y]  // Right
-          ];
-          
+          // Check 4 neighbors (Up, Down, Left, Right) - optimized bounds checking
           let hasInkNeighbor = false;
-          let inkColor = [0, 0, 0];
+          let inkR = 0, inkG = 0, inkB = 0;
           
-          for (const [nx, ny] of neighbors) {
-            if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
-              const ni = (ny * w + nx) * 4;
-              const neighborGray = original[ni] * 0.299 + original[ni + 1] * 0.587 + original[ni + 2] * 0.114;
-              if (neighborGray < 128) {
-                hasInkNeighbor = true;
-                inkColor = [original[ni], original[ni + 1], original[ni + 2]];
-                break;
-              }
+          // Check up
+          if (y > 0) {
+            const ni = i + neighborOffsets[0];
+            const neighborGray = original[ni] * GRAY_R + original[ni + 1] * GRAY_G + original[ni + 2] * GRAY_B;
+            if (neighborGray < paperThresholdScaled) {
+              hasInkNeighbor = true;
+              inkR = original[ni];
+              inkG = original[ni + 1];
+              inkB = original[ni + 2];
+            }
+          }
+          
+          // Check down
+          if (!hasInkNeighbor && y < h - 1) {
+            const ni = i + neighborOffsets[1];
+            const neighborGray = original[ni] * GRAY_R + original[ni + 1] * GRAY_G + original[ni + 2] * GRAY_B;
+            if (neighborGray < paperThresholdScaled) {
+              hasInkNeighbor = true;
+              inkR = original[ni];
+              inkG = original[ni + 1];
+              inkB = original[ni + 2];
+            }
+          }
+          
+          // Check left
+          if (!hasInkNeighbor && x > 0) {
+            const ni = i + neighborOffsets[2];
+            const neighborGray = original[ni] * GRAY_R + original[ni + 1] * GRAY_G + original[ni + 2] * GRAY_B;
+            if (neighborGray < paperThresholdScaled) {
+              hasInkNeighbor = true;
+              inkR = original[ni];
+              inkG = original[ni + 1];
+              inkB = original[ni + 2];
+            }
+          }
+          
+          // Check right
+          if (!hasInkNeighbor && x < w - 1) {
+            const ni = i + neighborOffsets[3];
+            const neighborGray = original[ni] * GRAY_R + original[ni + 1] * GRAY_G + original[ni + 2] * GRAY_B;
+            if (neighborGray < paperThresholdScaled) {
+              hasInkNeighbor = true;
+              inkR = original[ni];
+              inkG = original[ni + 1];
+              inkB = original[ni + 2];
             }
           }
           
           if (hasInkNeighbor) {
             // Calculate bleed probability with roughness adding randomness
-            const prob = baseProb * (1 - roughness * 0.5 + Math.random() * roughness);
+            const prob = baseProb * (roughnessFactor + Math.random() * roughness);
             
             if (Math.random() < prob) {
               // Flip to ink - but at 90% opacity (slightly lighter than core ink)
-              // This simulates ink thinning as it spreads into paper fibers
-              const bleedOpacity = 0.9;
-              result[i] = Math.round(inkColor[0] * bleedOpacity + 255 * (1 - bleedOpacity));
-              result[i + 1] = Math.round(inkColor[1] * bleedOpacity + 255 * (1 - bleedOpacity));
-              result[i + 2] = Math.round(inkColor[2] * bleedOpacity + 255 * (1 - bleedOpacity));
+              result[i] = Math.round(inkR * bleedOpacity + 255 * oneMinusBleedOpacity);
+              result[i + 1] = Math.round(inkG * bleedOpacity + 255 * oneMinusBleedOpacity);
+              result[i + 2] = Math.round(inkB * bleedOpacity + 255 * oneMinusBleedOpacity);
             }
           }
         }
@@ -623,24 +779,28 @@ function interpolateColor(color1, color2, t) {
   ];
 }
 
-// Apply gradient map
+// Apply gradient map (optimized)
 function applyGradientMap(imageData, gradientColors) {
   const data = new Uint8ClampedArray(imageData.data);
   const colors = gradientColors.map(key => DOMO_PALETTE[key]?.rgb || [0, 0, 0]);
   const numStops = colors.length;
+  const len = data.length;
+  const stopsMinusOne = numStops - 1;
   
-  for (let i = 0; i < data.length; i += 4) {
-    const gray = (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114) / 255;
+  for (let i = 0; i < len; i += 4) {
+    const gray = getGray(data, i);
     
-    const scaledPos = gray * (numStops - 1);
+    const scaledPos = gray * stopsMinusOne;
     const index = Math.min(Math.floor(scaledPos), numStops - 2);
     const t = scaledPos - index;
     
-    const [r, g, b] = interpolateColor(colors[index], colors[index + 1], t);
+    const c1 = colors[index];
+    const c2 = colors[index + 1];
+    const oneMinusT = 1 - t;
     
-    data[i] = r;
-    data[i + 1] = g;
-    data[i + 2] = b;
+    data[i] = Math.round(c1[0] * oneMinusT + c2[0] * t);
+    data[i + 1] = Math.round(c1[1] * oneMinusT + c2[1] * t);
+    data[i + 2] = Math.round(c1[2] * oneMinusT + c2[2] * t);
   }
   
   return new ImageData(data, imageData.width, imageData.height);
@@ -664,8 +824,8 @@ function saveCustomPresets(presets) {
   }
 }
 
-// Toast notification component
-function Toast({ message, visible, onHide }) {
+// Toast notification component (memoized)
+const Toast = memo(function Toast({ message, visible, onHide }) {
   useEffect(() => {
     if (visible) {
       const timer = setTimeout(onHide, 2000);
@@ -693,7 +853,7 @@ function Toast({ message, visible, onHide }) {
       {message}
     </div>
   );
-}
+});
 
 // Tooltip component
 function Tooltip({ text, children }) {
@@ -1330,12 +1490,15 @@ export default function DomoDitherTool() {
   
   const [layers, setLayers] = useState(DEFAULT_STATE.layers);
   
-  // Zoom and pan
-  const [zoom, setZoom] = useState(DEFAULT_STATE.zoom);
-  const [panX, setPanX] = useState(DEFAULT_STATE.panX);
-  const [panY, setPanY] = useState(DEFAULT_STATE.panY);
+  // Viewport architecture
+  const [viewportSize, setViewportSize] = useState(DEFAULT_STATE.viewportSize);
+  const [imageTransform, setImageTransform] = useState(DEFAULT_STATE.imageTransform);
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+  
+  // Pre-blur and background
+  const [preBlur, setPreBlur] = useState(DEFAULT_STATE.preBlur);
+  const [showBackground, setShowBackground] = useState(DEFAULT_STATE.showBackground);
   
   // Comparison slider
   const [showComparison, setShowComparison] = useState(false);
@@ -1415,9 +1578,10 @@ export default function DomoDitherTool() {
     setGradientDitherThreshold(DEFAULT_STATE.gradientDitherThreshold);
     setBackgroundColor(DEFAULT_STATE.backgroundColor);
     setExportResolution(DEFAULT_STATE.exportResolution);
-    setZoom(DEFAULT_STATE.zoom);
-    setPanX(DEFAULT_STATE.panX);
-    setPanY(DEFAULT_STATE.panY);
+    setViewportSize(DEFAULT_STATE.viewportSize);
+    setImageTransform(DEFAULT_STATE.imageTransform);
+    setPreBlur(DEFAULT_STATE.preBlur);
+    setShowBackground(DEFAULT_STATE.showBackground);
     setLayers(DEFAULT_STATE.layers.map(l => ({ ...l, id: Date.now() })));
     showToast('Reset to defaults');
   };
@@ -1592,9 +1756,7 @@ export default function DomoDitherTool() {
       const img = new Image();
       img.onload = () => {
         setImage(img);
-        setZoom(1);
-        setPanX(0);
-        setPanY(0);
+        setImageTransform({ x: 0, y: 0, scale: 1 });
         showToast('Image loaded');
       };
       img.src = event.target.result;
@@ -1602,24 +1764,30 @@ export default function DomoDitherTool() {
     reader.readAsDataURL(file);
   };
   
-  // Zoom handlers
+  // Zoom handlers (viewport architecture - image moves, canvas stays fixed)
   const handleWheel = (e) => {
     if (!image) return;
     e.preventDefault();
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    setZoom(z => Math.max(0.25, Math.min(8, z * delta)));
+    setImageTransform(prev => ({
+      ...prev,
+      scale: Math.max(0.25, Math.min(8, prev.scale * delta))
+    }));
   };
   
   const handleMouseDown = (e) => {
     if (!image || e.button !== 0 || showComparison) return;
     setIsPanning(true);
-    setPanStart({ x: e.clientX - panX, y: e.clientY - panY });
+    setPanStart({ x: e.clientX - imageTransform.x, y: e.clientY - imageTransform.y });
   };
   
   const handleMouseMove = (e) => {
     if (!isPanning) return;
-    setPanX(e.clientX - panStart.x);
-    setPanY(e.clientY - panStart.y);
+    setImageTransform(prev => ({
+      ...prev,
+      x: e.clientX - panStart.x,
+      y: e.clientY - panStart.y
+    }));
   };
   
   const handleMouseUp = () => {
@@ -1627,12 +1795,19 @@ export default function DomoDitherTool() {
   };
   
   const resetView = () => {
-    setZoom(1);
-    setPanX(0);
-    setPanY(0);
+    setImageTransform({ x: 0, y: 0, scale: 1 });
+  };
+  
+  // Aspect ratio handlers
+  const setAspectRatio = (ratio) => {
+    if (ratio === '1:1') {
+      setViewportSize({ w: 1080, h: 1080 });
+    } else if (ratio === '9:16') {
+      setViewportSize({ w: 1080, h: 1920 });
+    }
   };
 
-  // Core image processing function
+  // Core image processing function (viewport architecture)
   const processImageCore = useCallback((sourceImage, targetCanvas, isExport = false) => {
     if (!sourceImage || !targetCanvas) return;
     
@@ -1640,8 +1815,12 @@ export default function DomoDitherTool() {
     const sourceCanvas = document.createElement('canvas');
     const sourceCtx = sourceCanvas.getContext('2d');
     
-    targetCanvas.width = sourceImage.width;
-    targetCanvas.height = sourceImage.height;
+    // Use viewport size for export, or source image size for preview
+    const outputWidth = isExport ? viewportSize.w : sourceImage.width;
+    const outputHeight = isExport ? viewportSize.h : sourceImage.height;
+    
+    targetCanvas.width = outputWidth;
+    targetCanvas.height = outputHeight;
     
     const scaledWidth = Math.round(sourceImage.width * debouncedImageScale);
     const scaledHeight = Math.round(sourceImage.height * debouncedImageScale);
@@ -1650,7 +1829,13 @@ export default function DomoDitherTool() {
     
     sourceCtx.fillStyle = '#888888';
     sourceCtx.fillRect(0, 0, scaledWidth, scaledHeight);
+    
+    // Apply pre-blur if enabled
+    if (preBlur > 0) {
+      sourceCtx.filter = `blur(${preBlur}px)`;
+    }
     sourceCtx.drawImage(sourceImage, 0, 0, scaledWidth, scaledHeight);
+    sourceCtx.filter = 'none';
     
     let sourceData = sourceCtx.getImageData(0, 0, scaledWidth, scaledHeight);
     
@@ -1683,23 +1868,36 @@ export default function DomoDitherTool() {
           }
           
           const resultData = new Uint8ClampedArray(ditheredData.data);
+          const ditheredDataArray = ditheredData.data;
+          const len = resultData.length;
+          const inv255 = 1 / 255;
+          const colorsLen = colors.length;
+          const colorsMinusOne = colorsLen - 1;
           
-          for (let i = 0; i < resultData.length; i += 4) {
-            const ditheredVal = ditheredData.data[i] / 255;
-            let r, g, b;
-            if (colors.length === 2) {
+          if (colorsLen === 2) {
+            const c0 = colors[0];
+            const c1 = colors[1];
+            for (let i = 0; i < len; i += 4) {
+              const ditheredVal = ditheredDataArray[i] * inv255;
               if (ditheredVal < 0.5) {
-                [r, g, b] = colors[0];
+                resultData[i] = c0[0];
+                resultData[i + 1] = c0[1];
+                resultData[i + 2] = c0[2];
               } else {
-                [r, g, b] = colors[1];
+                resultData[i] = c1[0];
+                resultData[i + 1] = c1[1];
+                resultData[i + 2] = c1[2];
               }
-            } else {
-              const colorIdx = Math.round(ditheredVal * (colors.length - 1));
-              [r, g, b] = colors[Math.min(colorIdx, colors.length - 1)];
             }
-            resultData[i] = r;
-            resultData[i + 1] = g;
-            resultData[i + 2] = b;
+          } else {
+            for (let i = 0; i < len; i += 4) {
+              const ditheredVal = ditheredDataArray[i] * inv255;
+              const colorIdx = Math.min(Math.round(ditheredVal * colorsMinusOne), colorsMinusOne);
+              const [r, g, b] = colors[colorIdx];
+              resultData[i] = r;
+              resultData[i + 1] = g;
+              resultData[i + 2] = b;
+            }
           }
           
           finalImageData = new ImageData(resultData, scaledWidth, scaledHeight);
@@ -1715,22 +1913,34 @@ export default function DomoDitherTool() {
         finalImageData = applyInkBleed(finalImageData, debouncedInkBleedAmount, debouncedInkBleedRoughness);
       }
       
-      ctx.fillStyle = backgroundColor;
-      ctx.fillRect(0, 0, sourceImage.width, sourceImage.height);
+      // Fill background if showBackground is true
+      if (showBackground) {
+        ctx.fillStyle = backgroundColor;
+        ctx.fillRect(0, 0, outputWidth, outputHeight);
+      } else {
+        ctx.clearRect(0, 0, outputWidth, outputHeight);
+      }
+      
+      // Calculate viewport crop based on imageTransform
+      const transform = isExport ? imageTransform : { x: 0, y: 0, scale: 1 };
+      const cropX = Math.max(0, Math.floor(-transform.x / transform.scale));
+      const cropY = Math.max(0, Math.floor(-transform.y / transform.scale));
+      const cropWidth = Math.min(scaledWidth - cropX, Math.floor(outputWidth / transform.scale));
+      const cropHeight = Math.min(scaledHeight - cropY, Math.floor(outputHeight / transform.scale));
       
       const offsetX = (scaledWidth - sourceImage.width) / 2;
       const offsetY = (scaledHeight - sourceImage.height) / 2;
       
-      const baseImageData = ctx.getImageData(0, 0, sourceImage.width, sourceImage.height);
+      const baseImageData = ctx.getImageData(0, 0, outputWidth, outputHeight);
       
-      for (let y = 0; y < sourceImage.height; y++) {
-        for (let x = 0; x < sourceImage.width; x++) {
-          const sx = Math.floor(x + offsetX);
-          const sy = Math.floor(y + offsetY);
+      for (let y = 0; y < outputHeight; y++) {
+        for (let x = 0; x < outputWidth; x++) {
+          const sx = Math.floor(cropX + x / transform.scale + offsetX);
+          const sy = Math.floor(cropY + y / transform.scale + offsetY);
           
           if (sx >= 0 && sx < scaledWidth && sy >= 0 && sy < scaledHeight) {
             const si = (sy * scaledWidth + sx) * 4;
-            const di = (y * sourceImage.width + x) * 4;
+            const di = (y * outputWidth + x) * 4;
             
             baseImageData.data[di] = finalImageData.data[si];
             baseImageData.data[di + 1] = finalImageData.data[si + 1];
@@ -1743,12 +1953,27 @@ export default function DomoDitherTool() {
       ctx.putImageData(baseImageData, 0, 0);
     } else {
       // Layer mode
-      ctx.fillStyle = backgroundColor;
-      ctx.fillRect(0, 0, sourceImage.width, sourceImage.height);
-      const baseImageData = ctx.getImageData(0, 0, sourceImage.width, sourceImage.height);
+      // Fill background if showBackground is true
+      if (showBackground) {
+        ctx.fillStyle = backgroundColor;
+        ctx.fillRect(0, 0, outputWidth, outputHeight);
+      } else {
+        ctx.clearRect(0, 0, outputWidth, outputHeight);
+      }
+      const baseImageData = ctx.getImageData(0, 0, outputWidth, outputHeight);
+      const baseData = baseImageData.data;
       
-      const offsetX = (scaledWidth - sourceImage.width) / 2;
-      const offsetY = (scaledHeight - sourceImage.height) / 2;
+      // Calculate viewport crop based on imageTransform
+      const transform = isExport ? imageTransform : { x: 0, y: 0, scale: 1 };
+      const cropX = Math.max(0, Math.floor(-transform.x / transform.scale));
+      const cropY = Math.max(0, Math.floor(-transform.y / transform.scale));
+      
+      const offsetX = (scaledWidth - sourceImage.width) * 0.5;
+      const offsetY = (scaledHeight - sourceImage.height) * 0.5;
+      const targetW = outputWidth;
+      const targetH = outputHeight;
+      const inv255 = 1 / 255;
+      const minDarkness = 0.02;
       
       debouncedLayers.forEach(layer => {
         // Skip hidden layers
@@ -1775,24 +2000,33 @@ export default function DomoDitherTool() {
         
         const [r, g, b] = DOMO_PALETTE[layer.colorKey]?.rgb || [0, 0, 0];
         const blendFn = blendModes[layer.blendMode] || blendModes.multiply;
+        const layerOpacity = layer.opacity;
+        const layerOffsetX = layer.offsetX;
+        const layerOffsetY = layer.offsetY;
+        const ditheredDataArray = ditheredData.data;
         
-        for (let y = 0; y < sourceImage.height; y++) {
-          for (let x = 0; x < sourceImage.width; x++) {
-            const sx = Math.floor(x + offsetX - layer.offsetX);
-            const sy = Math.floor(y + offsetY - layer.offsetY);
+        // Optimized loop with pre-calculated values (viewport-aware)
+        for (let y = 0; y < targetH; y++) {
+          const sy = Math.floor(cropY + y / transform.scale + offsetY - layerOffsetY);
+          if (sy < 0 || sy >= scaledHeight) continue;
+          
+          const syw = sy * scaledWidth;
+          const yw = y * targetW;
+          
+          for (let x = 0; x < targetW; x++) {
+            const sx = Math.floor(cropX + x / transform.scale + offsetX - layerOffsetX);
+            if (sx < 0 || sx >= scaledWidth) continue;
             
-            if (sx >= 0 && sx < scaledWidth && sy >= 0 && sy < scaledHeight) {
-              const si = (sy * scaledWidth + sx) * 4;
-              const di = (y * sourceImage.width + x) * 4;
-              
-              const darkness = 1 - (ditheredData.data[si] / 255);
-              // Treat near-white pixels as fully transparent (screen print behavior)
-              if (darkness > 0.02) {
-                const alpha = layer.opacity * darkness;
-                baseImageData.data[di] = blendFn(baseImageData.data[di], r, alpha);
-                baseImageData.data[di + 1] = blendFn(baseImageData.data[di + 1], g, alpha);
-                baseImageData.data[di + 2] = blendFn(baseImageData.data[di + 2], b, alpha);
-              }
+            const si = (syw + sx) * 4;
+            const di = (yw + x) * 4;
+            
+            const darkness = 1 - (ditheredDataArray[si] * inv255);
+            // Treat near-white pixels as fully transparent (screen print behavior)
+            if (darkness > minDarkness) {
+              const alpha = layerOpacity * darkness;
+              baseData[di] = blendFn(baseData[di], r, alpha);
+              baseData[di + 1] = blendFn(baseData[di + 1], g, alpha);
+              baseData[di + 2] = blendFn(baseData[di + 2], b, alpha);
             }
           }
         }
@@ -1800,25 +2034,35 @@ export default function DomoDitherTool() {
       
       ctx.putImageData(baseImageData, 0, 0);
     }
-  }, [debouncedImageScale, debouncedBrightness, debouncedContrast, invert, gradientEnabled, gradientColors, gradientDitherType, debouncedGradientDitherThreshold, debouncedGradientDitherScale, debouncedGradientDitherAngle, debouncedLayers, backgroundColor, inkBleed, debouncedInkBleedAmount, debouncedInkBleedRoughness]);
+  }, [debouncedImageScale, debouncedBrightness, debouncedContrast, invert, preBlur, gradientEnabled, gradientColors, gradientDitherType, debouncedGradientDitherThreshold, debouncedGradientDitherScale, debouncedGradientDitherAngle, debouncedLayers, backgroundColor, showBackground, viewportSize, imageTransform, inkBleed, debouncedInkBleedAmount, debouncedInkBleedRoughness]);
 
-  // Process preview image (debounced)
+  // Process preview image (debounced and optimized)
   useEffect(() => {
     if (!previewImage || !canvasRef.current || !originalCanvasRef.current || processingRef.current) return;
     
     processingRef.current = true;
     
+    // Use double requestAnimationFrame for better performance (allows browser to batch updates)
     requestAnimationFrame(() => {
-      // Draw original for comparison
-      const originalCanvas = originalCanvasRef.current;
-      originalCanvas.width = previewImage.width;
-      originalCanvas.height = previewImage.height;
-      originalCanvas.getContext('2d').drawImage(previewImage, 0, 0);
-      
-      // Process the preview image
-      processImageCore(previewImage, canvasRef.current);
-      
-      processingRef.current = false;
+      requestAnimationFrame(() => {
+        // Draw original for comparison
+        const originalCanvas = originalCanvasRef.current;
+        if (!originalCanvas) {
+          processingRef.current = false;
+          return;
+        }
+        const originalCtx = originalCanvas.getContext('2d');
+        originalCanvas.width = previewImage.width;
+        originalCanvas.height = previewImage.height;
+        originalCtx.drawImage(previewImage, 0, 0);
+        
+        // Process the preview image
+        if (canvasRef.current) {
+          processImageCore(previewImage, canvasRef.current);
+        }
+        
+        processingRef.current = false;
+      });
     });
   }, [previewImage, processImageCore]);
 
@@ -1866,7 +2110,105 @@ export default function DomoDitherTool() {
     showToast(`Exported at ${exportResolution}`);
   };
 
-  const gradientAlgoInfo = DITHER_ALGORITHMS[gradientDitherType];
+  const exportSVG = () => {
+    if (!image) return;
+    
+    // Create a temporary canvas to get the processed image data
+    const tempCanvas = document.createElement('canvas');
+    processImageCore(image, tempCanvas, true);
+    const ctx = tempCanvas.getContext('2d');
+    const imageData = ctx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+    
+    const svgWidth = viewportSize.w;
+    const svgHeight = viewportSize.h;
+    
+    let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}">\n`;
+    
+    // Background if showBackground is true
+    if (showBackground) {
+      svg += `  <rect width="${svgWidth}" height="${svgHeight}" fill="${backgroundColor}"/>\n`;
+    }
+    
+    // Process each layer
+    if (!gradientEnabled && debouncedLayers.length > 0) {
+      debouncedLayers.forEach((layer, layerIdx) => {
+        if (layer.visible === false) return;
+        
+        const color = DOMO_PALETTE[layer.colorKey];
+        if (!color) return;
+        
+        svg += `  <g id="${color.name}" fill="${color.hex}">\n`;
+        
+        const algoInfo = DITHER_ALGORITHMS[layer.ditherType];
+        
+        // For halftone patterns, generate circles
+        if (algoInfo?.category === 'halftone' && layer.ditherType === 'halftoneCircle') {
+          const step = Math.max(3, Math.floor(layer.scale));
+          const maxRadius = step * 0.48;
+          const rad = (layer.angle * Math.PI) / 180;
+          const cos = Math.cos(rad);
+          const sin = Math.sin(rad);
+          
+          // Sample points and generate circles
+          for (let gy = 0; gy < svgHeight + step; gy += step) {
+            for (let gx = 0; gx < svgWidth + step; gx += step) {
+              const cx = gx * cos - gy * sin + svgWidth * 0.5;
+              const cy = gx * sin + gy * cos + svgHeight * 0.5;
+              
+              if (cx < -step || cx > svgWidth + step || cy < -step || cy > svgHeight + step) continue;
+              
+              const px = Math.max(0, Math.min(svgWidth - 1, Math.round(cx)));
+              const py = Math.max(0, Math.min(svgHeight - 1, Math.round(cy)));
+              const idx = (py * svgWidth + px) * 4;
+              
+              if (idx < imageData.data.length) {
+                const gray = (imageData.data[idx] + imageData.data[idx + 1] + imageData.data[idx + 2]) / 3 / 255;
+                const darkness = 1 - gray;
+                const radius = Math.sqrt(darkness) * maxRadius * (0.6 + layer.threshold * 0.7);
+                
+                if (radius > 0.5) {
+                  svg += `    <circle cx="${cx}" cy="${cy}" r="${radius}" opacity="${layer.opacity}"/>\n`;
+                }
+              }
+            }
+          }
+        } else {
+          // For other patterns, use rects (simplified - could be optimized further)
+          const pixelSize = 1;
+          for (let y = 0; y < svgHeight; y += pixelSize) {
+            for (let x = 0; x < svgWidth; x += pixelSize) {
+              const idx = (y * svgWidth + x) * 4;
+              if (idx < imageData.data.length) {
+                const gray = (imageData.data[idx] + imageData.data[idx + 1] + imageData.data[idx + 2]) / 3;
+                if (gray < 200) { // Threshold for dark pixels
+                  svg += `    <rect x="${x}" y="${y}" width="${pixelSize}" height="${pixelSize}" opacity="${layer.opacity}"/>\n`;
+                }
+              }
+            }
+          }
+        }
+        
+        svg += `  </g>\n`;
+      });
+    }
+    
+    svg += `</svg>`;
+    
+    // Download SVG
+    const blob = new Blob([svg], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'domo-dither.svg';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    showToast('Exported SVG');
+  };
+
+  const gradientAlgoInfo = useMemo(() => DITHER_ALGORITHMS[gradientDitherType], [gradientDitherType]);
 
   return (
     <DropZone onDrop={loadImageFile}>
@@ -1891,6 +2233,11 @@ export default function DomoDitherTool() {
             {image && (
               <>
                 <Slider label={`SCALE ${Math.round(imageScale * 100)}%`} value={imageScale} min={0.5} max={2} step={0.05} onChange={setImageScale} />
+                <Slider label={`PRE-BLUR ${Math.round(preBlur)}px`} value={preBlur} min={0} max={20} step={0.5} onChange={setPreBlur} />
+                <div style={{ display: 'flex', gap: '4px', marginBottom: '12px' }}>
+                  <Button onClick={() => setAspectRatio('1:1')} active={viewportSize.w === viewportSize.h} style={{ flex: 1, fontSize: '9px' }}>1:1</Button>
+                  <Button onClick={() => setAspectRatio('9:16')} active={viewportSize.w === 1080 && viewportSize.h === 1920} style={{ flex: 1, fontSize: '9px' }}>9:16</Button>
+                </div>
                 <Button onClick={randomizeLayers}>↻ RANDOMIZE</Button>
               </>
             )}
@@ -2089,8 +2436,17 @@ export default function DomoDitherTool() {
               ))}
             </div>
             
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', alignItems: 'center' }}>
+              <label style={{ color: '#666', fontSize: '10px', fontFamily: 'monospace' }}>SHOW BACKGROUND</label>
+              <Button onClick={() => setShowBackground(!showBackground)} active={showBackground} style={{ flex: 1 }}>
+                {showBackground ? 'ON' : 'OFF'}
+              </Button>
+            </div>
             {image && (
-              <Button primary onClick={exportPNG}>EXPORT PNG</Button>
+              <>
+                <Button primary onClick={exportPNG} style={{ marginBottom: '8px' }}>EXPORT PNG</Button>
+                <Button onClick={exportSVG}>EXPORT SVG</Button>
+              </>
             )}
           </Section>
         </div>
@@ -2160,9 +2516,9 @@ export default function DomoDitherTool() {
               
               {/* Controls */}
               <div style={{ display: 'flex', gap: '4px', pointerEvents: 'auto' }}>
-                <Button small onClick={() => setZoom(z => Math.max(0.25, z / 1.5))}>−</Button>
-                <Button small onClick={resetView} style={{ minWidth: '60px' }}>{Math.round(zoom * 100)}%</Button>
-                <Button small onClick={() => setZoom(z => Math.min(8, z * 1.5))}>+</Button>
+                <Button small onClick={() => setImageTransform(prev => ({ ...prev, scale: Math.max(0.25, prev.scale / 1.5) }))}>−</Button>
+                <Button small onClick={resetView} style={{ minWidth: '60px' }}>{Math.round(imageTransform.scale * 100)}%</Button>
+                <Button small onClick={() => setImageTransform(prev => ({ ...prev, scale: Math.min(8, prev.scale * 1.5) }))}>+</Button>
                 <div style={{ width: '8px' }} />
                 <Button small onClick={() => setShowComparison(!showComparison)} active={showComparison}>
                   {showComparison ? '✓ COMPARE' : 'COMPARE'}
@@ -2194,11 +2550,20 @@ export default function DomoDitherTool() {
             </div>
           ) : (
             <div style={{
-              transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
-              transformOrigin: 'center center',
-              transition: isPanning ? 'none' : 'transform 0.1s ease-out',
-              position: 'relative'
+              width: `${viewportSize.w}px`,
+              height: `${viewportSize.h}px`,
+              position: 'relative',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+              border: '1px solid #333'
             }}>
+              <div style={{
+                transform: `translate(${imageTransform.x}px, ${imageTransform.y}px) scale(${imageTransform.scale})`,
+                transformOrigin: 'center center',
+                transition: isPanning ? 'none' : 'transform 0.1s ease-out',
+                position: 'absolute',
+                width: '100%',
+                height: '100%'
+              }}>
               {/* Original canvas (for comparison) */}
               <canvas 
                 ref={originalCanvasRef} 
@@ -2207,7 +2572,7 @@ export default function DomoDitherTool() {
                   top: 0,
                   left: 0,
                   border: '1px solid #333',
-                  imageRendering: zoom > 1 ? 'pixelated' : 'auto',
+                  imageRendering: imageTransform.scale > 1 ? 'pixelated' : 'auto',
                   clipPath: showComparison ? `inset(0 ${(1 - comparisonPosition) * 100}% 0 0)` : 'none',
                   display: showComparison ? 'block' : 'none'
                 }} 
@@ -2218,7 +2583,7 @@ export default function DomoDitherTool() {
                 ref={canvasRef} 
                 style={{ 
                   border: '1px solid #333',
-                  imageRendering: zoom > 1 ? 'pixelated' : 'auto',
+                  imageRendering: imageTransform.scale > 1 ? 'pixelated' : 'auto',
                   clipPath: showComparison ? `inset(0 0 0 ${comparisonPosition * 100}%)` : 'none'
                 }} 
               />
@@ -2230,6 +2595,7 @@ export default function DomoDitherTool() {
                   onChange={setComparisonPosition} 
                 />
               )}
+              </div>
             </div>
           )}
           <canvas ref={sourceCanvasRef} style={{ display: 'none' }} />

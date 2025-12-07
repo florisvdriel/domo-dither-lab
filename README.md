@@ -18,15 +18,20 @@ Built as a research & development exploration of:
 - **Layer system**: Up to 4 color layers with individual patterns, offsets, and blend modes
 - **Gradient mapping**: Multi-stop color gradients with optional dithering
 - **Analog effects**: Ink bleed simulation, paper texture overlay
-- **Preset system**: Built-in presets + save your own custom combinations
-- **Export options**: 1x, 2x, 4x resolution PNG export
+- **Preset system**: Built-in presets (including new RGB Split) + save your own custom combinations
+- **Export options**: PNG export (1x, 2x, 4x resolution) + SVG export with layer separation
+- **Viewport architecture**: Fixed canvas window with image positioning for precise framing
+- **Pre-blur**: Apply blur before dithering for softer results
+- **Transparency control**: Toggle background visibility for transparent exports
+- **Aspect ratio presets**: Quick 1:1 and 9:16 viewport sizing
 
 ## Tech Stack
 
+- Next.js 14+ with App Router
 - React 18+ with Hooks
 - Canvas API for image processing
 - Custom dithering algorithms
-- No external dependencies (beyond React)
+- SVG generation for vector exports
 
 ## Development
 
@@ -34,34 +39,50 @@ This was built in collaboration with Claude AI as an exploration of "vibe coding
 
 ### Local Development
 
-To run this locally, you'll need Node.js installed. Then:
+To run this locally, you'll need Node.js 18+ installed. Then:
 
 ```bash
 npm install
-npm start
+npm run dev
 ```
 
-This will start a development server at `http://localhost:3000`
+This will start a Next.js development server at `http://localhost:3000`
 
 ### Building for Production
 
 ```bash
 npm run build
+npm start
 ```
 
-This creates an optimized production build in the `build` folder.
+This creates an optimized production build using Next.js.
 
 ## Deployment
 
-The easiest way to deploy this is through Netlify:
+### Vercel (Recommended)
+
+The easiest way to deploy a Next.js app is through Vercel:
+
+1. Push this repo to GitHub
+2. Go to [vercel.com](https://vercel.com)
+3. Click "New Project"
+4. Select your repository
+5. Vercel will automatically detect Next.js and configure the build
+6. Deploy!
+
+### Netlify
 
 1. Push this repo to GitHub
 2. Go to [netlify.com](https://netlify.com)
 3. Click "New site from Git"
 4. Select your repository
 5. Build command: `npm run build`
-6. Publish directory: `build`
+6. Publish directory: `.next`
 7. Deploy!
+
+### Other Platforms
+
+Next.js can be deployed to any platform that supports Node.js. The build output is in the `.next` directory.
 
 ## Design Philosophy
 
