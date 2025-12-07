@@ -1,6 +1,6 @@
 export const metadata = {
-  title: 'Domo Dither Tool',
-  description: 'Generative dithering tool exploring flexible brand systems',
+  title: 'Halftone Lab',
+  description: 'Generative dithering and halftone pattern tool',
 };
 
 export default function RootLayout({ children }) {
@@ -24,4 +24,3 @@ export default function RootLayout({ children }) {
     </html>
   );
 }
-

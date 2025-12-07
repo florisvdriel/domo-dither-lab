@@ -3,17 +3,20 @@
 import { useState } from 'react';
 import { DITHER_ALGORITHMS } from '../../constants/ditherAlgorithms';
 import { BLEND_MODES } from '../../constants';
-import { DOMO_PALETTE } from '../../constants/palette';
+import { DEFAULT_PALETTE } from '../../constants/palette';
 import IconButton from './IconButton';
-import ColorPicker from './ColorPicker';
+import { CompactColorPicker } from './ColorPicker';
 import AlgorithmSelect from './AlgorithmSelect';
 import Slider from './Slider';
 
-export default function LayerPanel({ layer, index, totalLayers, onUpdate, onRemove, onDuplicate, onMoveUp, onMoveDown, canRemove }) {
+export default function LayerPanel({ layer, index, totalLayers, onUpdate, onRemove, onDuplicate, onMoveUp, onMoveDown, canRemove, palette = null }) {
   const [expanded, setExpanded] = useState(true);
   const [hovering, setHovering] = useState(false);
   const algoInfo = DITHER_ALGORITHMS[layer.ditherType];
   const isVisible = layer.visible !== false; // Default to true if not set
+  
+  // Use provided palette or fall back to DEFAULT_PALETTE
+  const activePalette = palette || DEFAULT_PALETTE;
   
   return (
     <div 
@@ -28,7 +31,7 @@ export default function LayerPanel({ layer, index, totalLayers, onUpdate, onRemo
       onMouseLeave={() => setHovering(false)}
     >
       <div style={{ display: 'flex' }}>
-        <div style={{ width: '4px', flexShrink: 0, backgroundColor: DOMO_PALETTE[layer.colorKey]?.hex || '#fff' }} />
+        <div style={{ width: '4px', flexShrink: 0, backgroundColor: activePalette[layer.colorKey]?.hex || '#fff' }} />
         <div style={{ flex: 1 }}>
           <div 
             style={{ 
@@ -58,18 +61,21 @@ export default function LayerPanel({ layer, index, totalLayers, onUpdate, onRemo
           
           {expanded && (
             <div style={{ padding: '12px' }}>
-              <ColorPicker value={layer.colorKey} onChange={(k) => onUpdate({ ...layer, colorKey: k })} label="COLOR" />
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', color: '#666', fontSize: '10px', marginBottom: '8px', fontFamily: 'monospace', letterSpacing: '0.05em' }}>COLOR</label>
+                <CompactColorPicker value={layer.colorKey} onChange={(k) => onUpdate({ ...layer, colorKey: k })} palette={activePalette} />
+              </div>
               
               <AlgorithmSelect value={layer.ditherType} onChange={(v) => onUpdate({ ...layer, ditherType: v })} />
               
-              <Slider label={`DENSITY ${Math.round(layer.threshold * 100)}%`} value={layer.threshold} min={0} max={1} step={0.01} onChange={(v) => onUpdate({ ...layer, threshold: v })} />
+              <Slider label={`DENSITY ${Math.round(layer.threshold * 100)}%`} value={layer.threshold} min={0} max={1} step={0.01} onChange={(v) => onUpdate({ ...layer, threshold: v })} debounceMs={50} />
               
               {algoInfo?.hasScale && (
-                <Slider label={`SIZE ${layer.scale}px`} value={layer.scale} min={2} max={32} step={1} onChange={(v) => onUpdate({ ...layer, scale: v })} />
+                <Slider label={`SIZE ${layer.scale}px`} value={layer.scale} min={2} max={32} step={1} onChange={(v) => onUpdate({ ...layer, scale: v })} debounceMs={50} />
               )}
               
               {algoInfo?.hasAngle && (
-                <Slider label={`ANGLE ${layer.angle}°`} value={layer.angle} min={0} max={180} step={5} onChange={(v) => onUpdate({ ...layer, angle: v })} />
+                <Slider label={`ANGLE ${layer.angle}°`} value={layer.angle} min={0} max={180} step={5} onChange={(v) => onUpdate({ ...layer, angle: v })} debounceMs={50} />
               )}
               
               {/* X/Y Offset sliders - prominent for misregistered screenprint look */}
@@ -83,8 +89,8 @@ export default function LayerPanel({ layer, index, totalLayers, onUpdate, onRemo
                   OFFSET (misregistration)
                 </label>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <Slider label={`X ${layer.offsetX}px`} value={layer.offsetX} min={-50} max={50} step={1} onChange={(v) => onUpdate({ ...layer, offsetX: v })} />
-                  <Slider label={`Y ${layer.offsetY}px`} value={layer.offsetY} min={-50} max={50} step={1} onChange={(v) => onUpdate({ ...layer, offsetY: v })} />
+                  <Slider label={`X ${layer.offsetX}px`} value={layer.offsetX} min={-50} max={50} step={1} onChange={(v) => onUpdate({ ...layer, offsetX: v })} debounceMs={30} />
+                  <Slider label={`Y ${layer.offsetY}px`} value={layer.offsetY} min={-50} max={50} step={1} onChange={(v) => onUpdate({ ...layer, offsetY: v })} debounceMs={30} />
                 </div>
               </div>
               
@@ -97,7 +103,7 @@ export default function LayerPanel({ layer, index, totalLayers, onUpdate, onRemo
                 {Object.entries(BLEND_MODES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
               
-              <Slider label={`OPACITY ${Math.round(layer.opacity * 100)}%`} value={layer.opacity} min={0} max={1} step={0.01} onChange={(v) => onUpdate({ ...layer, opacity: v })} />
+              <Slider label={`OPACITY ${Math.round(layer.opacity * 100)}%`} value={layer.opacity} min={0} max={1} step={0.01} onChange={(v) => onUpdate({ ...layer, opacity: v })} debounceMs={30} />
             </div>
           )}
         </div>

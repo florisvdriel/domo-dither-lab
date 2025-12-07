@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 
 // Constants
-import { DOMO_PALETTE, ALL_COLOR_KEYS } from '../constants/palette';
+import { DEFAULT_PALETTE } from '../constants/palette';
 import { DITHER_ALGORITHMS } from '../constants/ditherAlgorithms';
 import { PRESETS } from '../constants/presets';
 import { BLEND_MODES, EXPORT_RESOLUTIONS, PREVIEW_MAX_WIDTH, DEFAULT_STATE } from '../constants';
@@ -11,15 +11,19 @@ import { BLEND_MODES, EXPORT_RESOLUTIONS, PREVIEW_MAX_WIDTH, DEFAULT_STATE } fro
 // Utilities
 import { useDebounce, getGray } from '../utils/helpers';
 import { ditherAlgorithms, blendModes } from '../utils/dithering';
-import { applyBrightnessContrast, invertImageData, applyInkBleed, applyGradientMap } from '../utils/imageProcessing';
+import { applyBrightnessContrast, invertImageData, applyInkBleed } from '../utils/imageProcessing';
 import { loadCustomPresets, saveCustomPresets } from '../utils/storage';
+import { generateCombinedSVG, exportLayersAsZip, downloadSVG, estimateSVGSize } from '../utils/svgExport';
+import { useDitherWorker } from '../hooks/useDitherWorker';
+import { loadCustomPalette, saveCustomPalette, loadActivePaletteMode, saveActivePaletteMode } from '../utils/paletteStorage';
 
 // UI Components
 import Toast from './ui/Toast';
+import PaletteEditor from './ui/PaletteEditor';
 import Tooltip from './ui/Tooltip';
 import Slider from './ui/Slider';
 import Button from './ui/Button';
-import ColorPicker, { ColorSwatch } from './ui/ColorPicker';
+import ColorPicker from './ui/ColorPicker';
 import Section from './ui/Section';
 import IconButton from './ui/IconButton';
 import AlgorithmSelect from './ui/AlgorithmSelect';
@@ -29,7 +33,7 @@ import ComparisonSlider from './ui/ComparisonSlider';
 import SavePresetModal from './ui/SavePresetModal';
 
 
-export default function DomoDitherTool() {
+export default function HalftoneLab() {
   const [image, setImage] = useState(null);
   const [previewImage, setPreviewImage] = useState(null); // Downscaled for performance
   const [imageScale, setImageScale] = useState(DEFAULT_STATE.imageScale);
@@ -43,13 +47,6 @@ export default function DomoDitherTool() {
   const [inkBleedAmount, setInkBleedAmount] = useState(DEFAULT_STATE.inkBleedAmount);
   const [inkBleedRoughness, setInkBleedRoughness] = useState(DEFAULT_STATE.inkBleedRoughness);
   const [paperTexture, setPaperTexture] = useState(DEFAULT_STATE.paperTexture);
-  
-  const [gradientEnabled, setGradientEnabled] = useState(DEFAULT_STATE.gradientEnabled);
-  const [gradientColors, setGradientColors] = useState(DEFAULT_STATE.gradientColors);
-  const [gradientDitherType, setGradientDitherType] = useState(DEFAULT_STATE.gradientDitherType);
-  const [gradientDitherScale, setGradientDitherScale] = useState(DEFAULT_STATE.gradientDitherScale);
-  const [gradientDitherAngle, setGradientDitherAngle] = useState(DEFAULT_STATE.gradientDitherAngle);
-  const [gradientDitherThreshold, setGradientDitherThreshold] = useState(DEFAULT_STATE.gradientDitherThreshold);
   
   const [layers, setLayers] = useState(DEFAULT_STATE.layers);
   
@@ -70,6 +67,11 @@ export default function DomoDitherTool() {
   const [customPresets, setCustomPresets] = useState(loadCustomPresets);
   const [showSaveModal, setShowSaveModal] = useState(false);
   
+  // Custom palette
+  const [customPalette, setCustomPalette] = useState(loadCustomPalette);
+  const [paletteMode, setPaletteMode] = useState(loadActivePaletteMode);
+  const [showPaletteEditor, setShowPaletteEditor] = useState(false);
+  
   const [toastMessage, setToastMessage] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
   
@@ -77,21 +79,37 @@ export default function DomoDitherTool() {
   const originalCanvasRef = useRef(null);
   const sourceCanvasRef = useRef(null);
   const fileInputRef = useRef(null);
+  const presetImportRef = useRef(null);
   const canvasContainerRef = useRef(null);
   const processingRef = useRef(false);
+  
+  // Web worker for off-main-thread dithering
+  const { dither: workerDither, isAvailable: isWorkerAvailable } = useDitherWorker();
 
-  const colorKeys = Object.keys(DOMO_PALETTE).filter(k => !['white', 'black'].includes(k));
+  // Active palette based on mode
+  const activePalette = useMemo(() => {
+    if (paletteMode === 'custom' && Object.keys(customPalette).length > 0) {
+      // Merge custom palette with black/white for backgrounds
+      return {
+        ...customPalette,
+        white: DEFAULT_PALETTE.white,
+        black: DEFAULT_PALETTE.black
+      };
+    }
+    return DEFAULT_PALETTE;
+  }, [paletteMode, customPalette]);
+
+  const colorKeys = Object.keys(activePalette).filter(k => !['white', 'black'].includes(k));
   
   // Debounce all processing-related state changes
-  const debouncedImageScale = useDebounce(imageScale, 150);
-  const debouncedBrightness = useDebounce(brightness, 150);
-  const debouncedContrast = useDebounce(contrast, 150);
-  const debouncedLayers = useDebounce(layers, 150);
-  const debouncedGradientDitherThreshold = useDebounce(gradientDitherThreshold, 150);
-  const debouncedGradientDitherScale = useDebounce(gradientDitherScale, 150);
-  const debouncedGradientDitherAngle = useDebounce(gradientDitherAngle, 150);
+  // Longer debounce for expensive operations
+  const debouncedImageScale = useDebounce(imageScale, 200);
+  const debouncedBrightness = useDebounce(brightness, 100);
+  const debouncedContrast = useDebounce(contrast, 100);
+  const debouncedLayers = useDebounce(layers, 100);
   const debouncedInkBleedAmount = useDebounce(inkBleedAmount, 150);
   const debouncedInkBleedRoughness = useDebounce(inkBleedRoughness, 150);
+  const debouncedPreBlur = useDebounce(preBlur, 150);
   
   const showToast = (message) => {
     setToastMessage(message);
@@ -132,12 +150,6 @@ export default function DomoDitherTool() {
     setInkBleedAmount(DEFAULT_STATE.inkBleedAmount);
     setInkBleedRoughness(DEFAULT_STATE.inkBleedRoughness);
     setPaperTexture(DEFAULT_STATE.paperTexture);
-    setGradientEnabled(DEFAULT_STATE.gradientEnabled);
-    setGradientColors([...DEFAULT_STATE.gradientColors]);
-    setGradientDitherType(DEFAULT_STATE.gradientDitherType);
-    setGradientDitherScale(DEFAULT_STATE.gradientDitherScale);
-    setGradientDitherAngle(DEFAULT_STATE.gradientDitherAngle);
-    setGradientDitherThreshold(DEFAULT_STATE.gradientDitherThreshold);
     setBackgroundColor(DEFAULT_STATE.backgroundColor);
     setExportResolution(DEFAULT_STATE.exportResolution);
     setViewportSize(DEFAULT_STATE.viewportSize);
@@ -194,42 +206,20 @@ export default function DomoDitherTool() {
     [newLayers[index], newLayers[index + 1]] = [newLayers[index + 1], newLayers[index]];
     setLayers(newLayers);
   };
-  
-  // Add gradient color
-  const addGradientColor = () => {
-    if (gradientColors.length >= 4) return;
-    const newColors = [...gradientColors];
-    const insertIndex = Math.floor(newColors.length / 2);
-    newColors.splice(insertIndex, 0, 'white');
-    setGradientColors(newColors);
-  };
-  
-  // Remove gradient color
-  const removeGradientColor = (index) => {
-    if (gradientColors.length <= 2) return;
-    setGradientColors(gradientColors.filter((_, i) => i !== index));
-  };
 
   // Apply preset
   const applyPreset = (presetKey, isCustom = false) => {
     const preset = isCustom ? customPresets[presetKey] : PRESETS[presetKey];
     if (!preset) return;
     
-    if (preset.gradient) {
-      setGradientEnabled(true);
-      setGradientColors([...preset.gradientColors]);
-      setGradientDitherType(preset.ditherType);
-      setGradientDitherScale(preset.ditherScale);
-      setGradientDitherAngle(preset.ditherAngle);
-      setGradientDitherThreshold(preset.ditherThreshold);
-    } else {
-      setGradientEnabled(false);
+    if (preset.layers) {
       setLayers(preset.layers.map((l, i) => ({ ...l, id: Date.now() + i })));
     }
     
     if (preset.inkBleed !== undefined) setInkBleed(preset.inkBleed);
     if (preset.inkBleedAmount !== undefined) setInkBleedAmount(preset.inkBleedAmount);
     if (preset.paperTexture !== undefined) setPaperTexture(preset.paperTexture);
+    if (preset.backgroundColor !== undefined) setBackgroundColor(preset.backgroundColor);
     
     showToast(`Applied ${preset.name} preset`);
   };
@@ -239,19 +229,11 @@ export default function DomoDitherTool() {
     const preset = {
       name: name.toUpperCase(),
       description: 'Custom preset',
-      gradient: gradientEnabled,
-      ...(gradientEnabled ? {
-        gradientColors: [...gradientColors],
-        ditherType: gradientDitherType,
-        ditherScale: gradientDitherScale,
-        ditherAngle: gradientDitherAngle,
-        ditherThreshold: gradientDitherThreshold
-      } : {
-        layers: layers.map(l => ({ ...l }))
-      }),
+      layers: layers.map(l => ({ ...l })),
       inkBleed,
       inkBleedAmount,
-      paperTexture
+      paperTexture,
+      backgroundColor
     };
     
     const newPresets = { ...customPresets, [name.toLowerCase().replace(/\s+/g, '_')]: preset };
@@ -270,12 +252,130 @@ export default function DomoDitherTool() {
     showToast('Preset deleted');
   };
 
+  // Export all custom presets as JSON
+  const exportPresetsAsJSON = () => {
+    if (Object.keys(customPresets).length === 0) {
+      showToast('No custom presets to export');
+      return;
+    }
+    
+    const exportData = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      presets: customPresets,
+      // Optionally include custom palette if it exists
+      ...(Object.keys(customPalette).length > 0 && { palette: customPalette })
+    };
+    
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `halftone-lab-presets-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    showToast(`Exported ${Object.keys(customPresets).length} preset(s)`);
+  };
+
+  // Import presets from JSON file
+  const importPresetsFromJSON = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target.result);
+        
+        // Validate structure
+        if (!data.presets || typeof data.presets !== 'object') {
+          showToast('Invalid preset file format');
+          return;
+        }
+        
+        // Validate each preset has required fields
+        let validPresets = 0;
+        const newPresets = { ...customPresets };
+        
+        Object.entries(data.presets).forEach(([key, preset]) => {
+          if (preset.name && preset.layers && Array.isArray(preset.layers)) {
+            newPresets[key] = preset;
+            validPresets++;
+          }
+        });
+        
+        if (validPresets === 0) {
+          showToast('No valid presets found in file');
+          return;
+        }
+        
+        setCustomPresets(newPresets);
+        saveCustomPresets(newPresets);
+        
+        // Also import palette if present
+        if (data.palette && typeof data.palette === 'object' && Object.keys(data.palette).length > 0) {
+          const newPalette = { ...customPalette, ...data.palette };
+          setCustomPalette(newPalette);
+          saveCustomPalette(newPalette);
+          showToast(`Imported ${validPresets} preset(s) and palette`);
+        } else {
+          showToast(`Imported ${validPresets} preset(s)`);
+        }
+      } catch (err) {
+        console.error('Import error:', err);
+        showToast('Failed to parse preset file');
+      }
+    };
+    reader.readAsText(file);
+    
+    // Reset input so same file can be imported again
+    event.target.value = '';
+  };
+
+  // Palette functions
+  const handleSavePalette = (newPalette) => {
+    setCustomPalette(newPalette);
+    saveCustomPalette(newPalette);
+    setShowPaletteEditor(false);
+    
+    // If palette is empty, switch back to default
+    if (Object.keys(newPalette).length === 0) {
+      setPaletteMode('default');
+      saveActivePaletteMode('default');
+      showToast('Custom palette cleared');
+    } else {
+      // Auto-switch to custom mode when saving
+      if (paletteMode !== 'custom') {
+        setPaletteMode('custom');
+        saveActivePaletteMode('custom');
+      }
+      showToast('Palette saved');
+    }
+  };
+
+  const togglePaletteMode = () => {
+    const newMode = paletteMode === 'default' ? 'custom' : 'default';
+    
+    // Don't allow switching to custom if no custom colors
+    if (newMode === 'custom' && Object.keys(customPalette).length === 0) {
+      showToast('Add custom colors first');
+      setShowPaletteEditor(true);
+      return;
+    }
+    
+    setPaletteMode(newMode);
+    saveActivePaletteMode(newMode);
+    showToast(`Using ${newMode === 'default' ? 'default' : 'custom'} palette`);
+  };
+
   // Randomizer
   const randomizeLayers = () => {
     const shuffledColors = [...colorKeys].sort(() => Math.random() - 0.5);
     const algorithms = ['halftoneCircle', 'halftoneLines', 'bayer4x4', 'bayer8x8', 'floydSteinberg', 'atkinson'];
     
-    setGradientEnabled(false);
     setLayers([
       {
         id: Date.now(),
@@ -394,8 +494,8 @@ export default function DomoDitherTool() {
     sourceCtx.fillRect(0, 0, scaledWidth, scaledHeight);
     
     // Apply pre-blur if enabled
-    if (preBlur > 0) {
-      sourceCtx.filter = `blur(${preBlur}px)`;
+    if (debouncedPreBlur > 0) {
+      sourceCtx.filter = `blur(${debouncedPreBlur}px)`;
     }
     sourceCtx.drawImage(sourceImage, 0, 0, scaledWidth, scaledHeight);
     sourceCtx.filter = 'none';
@@ -410,102 +510,27 @@ export default function DomoDitherTool() {
       sourceData = invertImageData(sourceData);
     }
     
-    let finalImageData;
-    
-    // Gradient map mode
-    if (gradientEnabled && gradientColors.length >= 2) {
-      const colors = gradientColors.map(key => DOMO_PALETTE[key]?.rgb || [0, 0, 0]);
-      
-      if (gradientDitherType !== 'none') {
-        const algo = ditherAlgorithms[gradientDitherType];
-        const algoInfo = DITHER_ALGORITHMS[gradientDitherType];
-        
-        if (algo) {
-          let ditheredData;
-        // Scale the dither scale parameter to maintain consistent visual appearance
-        const scaledGradientDitherScale = debouncedGradientDitherScale * scaleFactor;
-        if (algoInfo.hasScale && algoInfo.hasAngle) {
-          ditheredData = algo(sourceData, debouncedGradientDitherThreshold, scaledGradientDitherScale, debouncedGradientDitherAngle);
-        } else if (algoInfo.hasScale) {
-          ditheredData = algo(sourceData, debouncedGradientDitherThreshold, scaledGradientDitherScale);
-        } else {
-          ditheredData = algo(sourceData, debouncedGradientDitherThreshold);
-        }
-          
-          const resultData = new Uint8ClampedArray(ditheredData.data);
-          const ditheredDataArray = ditheredData.data;
-          const len = resultData.length;
-          const inv255 = 1 / 255;
-          const colorsLen = colors.length;
-          const colorsMinusOne = colorsLen - 1;
-          
-          if (colorsLen === 2) {
-            const c0 = colors[0];
-            const c1 = colors[1];
-            for (let i = 0; i < len; i += 4) {
-              const ditheredVal = ditheredDataArray[i] * inv255;
-              if (ditheredVal < 0.5) {
-                resultData[i] = c0[0];
-                resultData[i + 1] = c0[1];
-                resultData[i + 2] = c0[2];
-              } else {
-                resultData[i] = c1[0];
-                resultData[i + 1] = c1[1];
-                resultData[i + 2] = c1[2];
-              }
-            }
-          } else {
-            for (let i = 0; i < len; i += 4) {
-              const ditheredVal = ditheredDataArray[i] * inv255;
-              const colorIdx = Math.min(Math.round(ditheredVal * colorsMinusOne), colorsMinusOne);
-              const [r, g, b] = colors[colorIdx];
-              resultData[i] = r;
-              resultData[i + 1] = g;
-              resultData[i + 2] = b;
-            }
-          }
-          
-          finalImageData = new ImageData(resultData, scaledWidth, scaledHeight);
-        } else {
-          finalImageData = applyGradientMap(sourceData, gradientColors);
-        }
-      } else {
-        finalImageData = applyGradientMap(sourceData, gradientColors);
-      }
-      
-      // Apply ink bleed if enabled
-      if (inkBleed && debouncedInkBleedAmount > 0) {
-        finalImageData = applyInkBleed(finalImageData, debouncedInkBleedAmount, debouncedInkBleedRoughness);
-      }
-      
-      // Always fill background (image functions as background)
-      ctx.fillStyle = backgroundColor;
-      ctx.fillRect(0, 0, outputWidth, outputHeight);
-      
-      // For both preview and export, direct 1:1 pixel copy
-      // Preview uses previewImage (already limited to PREVIEW_MAX_WIDTH) so it matches visually
-      ctx.putImageData(finalImageData, 0, 0);
-    } else {
-      // Layer mode
-      // Always fill background (image functions as background)
-      ctx.fillStyle = backgroundColor;
-      ctx.fillRect(0, 0, outputWidth, outputHeight);
-      const baseImageData = ctx.getImageData(0, 0, outputWidth, outputHeight);
-      const baseData = baseImageData.data;
+    // Layer mode - fill background first
+    ctx.fillStyle = backgroundColor;
+    ctx.fillRect(0, 0, outputWidth, outputHeight);
+    const baseImageData = ctx.getImageData(0, 0, outputWidth, outputHeight);
+    const baseData = baseImageData.data;
       
       const inv255 = 1 / 255;
       const minDarkness = 0.02;
       
+      // Process visible layers only
+      const visibleLayers = debouncedLayers.filter(l => l.visible !== false);
+      
       // For both preview and export, use direct 1:1 pixel mapping
       // Preview uses previewImage (already limited to PREVIEW_MAX_WIDTH) so it matches visually
-      debouncedLayers.forEach(layer => {
-        // Skip hidden layers
-        if (layer.visible === false) return;
+      for (let li = 0; li < visibleLayers.length; li++) {
+        const layer = visibleLayers[li];
         
         const algo = ditherAlgorithms[layer.ditherType];
         const algoInfo = DITHER_ALGORITHMS[layer.ditherType];
         
-        if (!algo) return;
+        if (!algo) continue;
         
         // Scale the dither scale parameter to maintain consistent visual appearance
         const scaledLayerScale = layer.scale * scaleFactor;
@@ -523,7 +548,10 @@ export default function DomoDitherTool() {
           ditheredData = applyInkBleed(ditheredData, debouncedInkBleedAmount, debouncedInkBleedRoughness);
         }
         
-        const [r, g, b] = DOMO_PALETTE[layer.colorKey]?.rgb || [0, 0, 0];
+        const paletteColor = activePalette[layer.colorKey];
+        const r = paletteColor?.rgb?.[0] ?? 0;
+        const g = paletteColor?.rgb?.[1] ?? 0;
+        const b = paletteColor?.rgb?.[2] ?? 0;
         const blendFn = blendModes[layer.blendMode] || blendModes.multiply;
         const layerOpacity = layer.opacity;
         const layerOffsetX = layer.offsetX;
@@ -534,6 +562,10 @@ export default function DomoDitherTool() {
         // Map from output coordinates to scaled coordinates when imageScale !== 1
         const scaleX = scaledWidth / outputWidth;
         const scaleY = scaledHeight / outputHeight;
+        
+        // Pre-calculate bounds to avoid per-pixel checks where possible
+        const minY = Math.max(0, Math.ceil(-layerOffsetY * scaleY));
+        const maxY = Math.min(outputHeight, Math.floor((scaledHeight - 1) / scaleY + layerOffsetY));
         
         for (let y = 0; y < outputHeight; y++) {
           const sy = Math.round((y - layerOffsetY) * scaleY);
@@ -546,8 +578,8 @@ export default function DomoDitherTool() {
             const sx = Math.round((x - layerOffsetX) * scaleX);
             if (sx < 0 || sx >= scaledWidth) continue;
             
-            const si = (syw + sx) * 4;
-            const di = (yw + x) * 4;
+            const si = (syw + sx) << 2; // Faster than * 4
+            const di = (yw + x) << 2;
             
             const darkness = 1 - (ditheredDataArray[si] * inv255);
             // Treat near-white pixels as fully transparent (screen print behavior)
@@ -559,39 +591,63 @@ export default function DomoDitherTool() {
             }
           }
         }
-      });
-      
-      ctx.putImageData(baseImageData, 0, 0);
-    }
-  }, [debouncedImageScale, debouncedBrightness, debouncedContrast, invert, preBlur, gradientEnabled, gradientColors, gradientDitherType, debouncedGradientDitherThreshold, debouncedGradientDitherScale, debouncedGradientDitherAngle, debouncedLayers, backgroundColor, viewportSize, imageTransform, inkBleed, debouncedInkBleedAmount, debouncedInkBleedRoughness, image]);
+      }
+    
+    ctx.putImageData(baseImageData, 0, 0);
+  }, [debouncedImageScale, debouncedBrightness, debouncedContrast, invert, debouncedPreBlur, debouncedLayers, backgroundColor, inkBleed, debouncedInkBleedAmount, debouncedInkBleedRoughness, image, activePalette]);
 
-  // Process preview image (debounced and optimized)
+  // Track pending updates to skip stale processing
+  const pendingUpdateRef = useRef(0);
+  
+  // Process preview image (debounced and optimized with skip-stale logic)
   useEffect(() => {
-    if (!previewImage || !canvasRef.current || !originalCanvasRef.current || processingRef.current) return;
+    if (!previewImage || !canvasRef.current || !originalCanvasRef.current) return;
+    
+    // Increment pending update counter
+    const updateId = ++pendingUpdateRef.current;
+    
+    // If already processing, the new update will be picked up when current finishes
+    if (processingRef.current) return;
     
     processingRef.current = true;
     
-    // Use double requestAnimationFrame for better performance (allows browser to batch updates)
+    // Use requestAnimationFrame for smooth rendering
     requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        // Draw original for comparison
-        const originalCanvas = originalCanvasRef.current;
-        if (!originalCanvas) {
-          processingRef.current = false;
-          return;
-        }
-        const originalCtx = originalCanvas.getContext('2d');
-        originalCanvas.width = previewImage.width;
-        originalCanvas.height = previewImage.height;
-        originalCtx.drawImage(previewImage, 0, 0);
-        
-        // Process the preview image
-        if (canvasRef.current) {
-          processImageCore(previewImage, canvasRef.current);
-        }
-        
+      // Skip if a newer update was requested
+      if (updateId !== pendingUpdateRef.current) {
         processingRef.current = false;
-      });
+        return;
+      }
+      
+      // Draw original for comparison
+      const originalCanvas = originalCanvasRef.current;
+      if (!originalCanvas) {
+        processingRef.current = false;
+        return;
+      }
+      const originalCtx = originalCanvas.getContext('2d');
+      originalCanvas.width = previewImage.width;
+      originalCanvas.height = previewImage.height;
+      originalCtx.drawImage(previewImage, 0, 0);
+      
+      // Process the preview image
+      if (canvasRef.current) {
+        processImageCore(previewImage, canvasRef.current);
+      }
+      
+      processingRef.current = false;
+      
+      // Check if there's a pending newer update
+      if (updateId !== pendingUpdateRef.current) {
+        // Trigger re-render to process the latest state
+        requestAnimationFrame(() => {
+          if (!processingRef.current && canvasRef.current) {
+            processingRef.current = true;
+            processImageCore(previewImage, canvasRef.current);
+            processingRef.current = false;
+          }
+        });
+      }
     });
   }, [previewImage, processImageCore]);
 
@@ -630,7 +686,7 @@ export default function DomoDitherTool() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `domo-dither-${exportResolution}.png`;
+    link.download = `halftone-${exportResolution}.png`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -639,254 +695,163 @@ export default function DomoDitherTool() {
     showToast(`Exported at ${exportResolution}`);
   };
 
-  const exportSVG = () => {
-    console.log('exportSVG called', { image: !!image });
-    if (!image) {
-      showToast('No image loaded');
-      return;
-    }
+  // Get source image data for SVG export
+  // If processingResolution is provided, downsample the image to that resolution first
+  // Maintains aspect ratio by fitting within the processing resolution bounds
+  // Applies the same brightness/contrast/invert adjustments as the preview
+  const getSourceImageData = useCallback((processingResolution = null) => {
+    if (!image) return null;
     
-    try {
-      console.log('Starting SVG export...');
-      // Create a temporary canvas to get the processed image data for reference
-      const tempCanvas = document.createElement('canvas');
-      processImageCore(image, tempCanvas, true);
-      const ctx = tempCanvas.getContext('2d');
-      
-      // Get the original source image data (before dithering) for sampling darkness values
+    // If no processing resolution specified, use full resolution
+    if (!processingResolution) {
       const sourceCanvas = document.createElement('canvas');
       sourceCanvas.width = image.width;
       sourceCanvas.height = image.height;
       const sourceCtx = sourceCanvas.getContext('2d');
       sourceCtx.drawImage(image, 0, 0);
-      const sourceImageData = sourceCtx.getImageData(0, 0, image.width, image.height);
+      let imageData = sourceCtx.getImageData(0, 0, image.width, image.height);
       
-      console.log('Image processed', { width: tempCanvas.width, height: tempCanvas.height });
-      
-      // Use actual processed image dimensions (limit to reasonable size for SVG)
-      const maxSVGSize = 2000; // Limit SVG size to prevent huge files
-      const maxDim = Math.max(tempCanvas.width, tempCanvas.height);
-      const scale = maxDim > 0 ? Math.min(1, maxSVGSize / maxDim) : 1;
-      const svgWidth = Math.max(1, Math.round(tempCanvas.width * scale));
-      const svgHeight = Math.max(1, Math.round(tempCanvas.height * scale));
-      
-      // Calculate scale factor for dither patterns (same as processImageCore)
-      const previewWidth = image ? (image.width > PREVIEW_MAX_WIDTH ? PREVIEW_MAX_WIDTH : image.width) : tempCanvas.width;
-      const ditherScaleFactor = image ? image.width / previewWidth : 1;
-      
-      let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}">\n`;
-      
-      // Always include background (image functions as background)
-      svg += `  <rect width="${svgWidth}" height="${svgHeight}" fill="${backgroundColor}"/>\n`;
-      
-      // Process gradient mode or layer mode
-      if (gradientEnabled && gradientColors.length >= 2) {
-        // Gradient mode: create a single group with gradient colors
-        const colors = gradientColors.map(key => DOMO_PALETTE[key]?.hex || '#000000');
-        svg += `  <defs>\n`;
-        svg += `    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">\n`;
-        gradientColors.forEach((colorKey, i) => {
-          const color = DOMO_PALETTE[colorKey];
-          const offset = (i / (gradientColors.length - 1)) * 100;
-          svg += `      <stop offset="${offset}%" stop-color="${color?.hex || '#000000'}"/>\n`;
-        });
-        svg += `    </linearGradient>\n`;
-        svg += `  </defs>\n`;
-        svg += `  <g id="Gradient" fill="url(#gradient)">\n`;
-        
-        // Generate pattern based on gradient dither type
-        const algoInfo = DITHER_ALGORITHMS[gradientDitherType];
-        if (algoInfo?.category === 'halftone' && gradientDitherType === 'halftoneCircle') {
-          // Scale the dither scale to match export dimensions
-          const scaledGradientDitherScale = debouncedGradientDitherScale * ditherScaleFactor;
-          const step = Math.max(3, Math.floor(scaledGradientDitherScale));
-          const maxRadius = step * 0.48;
-          const rad = (debouncedGradientDitherAngle * Math.PI) / 180;
-          const cos = Math.cos(rad);
-          const sin = Math.sin(rad);
-          const radiusMultiplier = maxRadius * (0.6 + debouncedGradientDitherThreshold * 0.7);
-          const wHalf = svgWidth * 0.5;
-          const hHalf = svgHeight * 0.5;
-          
-          // Match the algorithm's grid bounds calculation
-          const gridExtent = Math.max(svgWidth, svgHeight) * 2;
-          const gridStart = -gridExtent;
-          const gridEnd = gridExtent;
-          const minGridX = Math.floor((gridStart - wHalf) / step) * step;
-          const maxGridX = Math.ceil((gridEnd - wHalf) / step) * step;
-          const minGridY = Math.floor((gridStart - hHalf) / step) * step;
-          const maxGridY = Math.ceil((gridEnd - hHalf) / step) * step;
-          
-          for (let gy = minGridY; gy <= maxGridY; gy += step) {
-            for (let gx = minGridX; gx <= maxGridX; gx += step) {
-              const cx = gx * cos - gy * sin + wHalf;
-              const cy = gx * sin + gy * cos + hHalf;
-              
-              if (cx < -step || cx >= svgWidth + step || cy < -step || cy >= svgHeight + step) continue;
-              
-              // Sample from original source image to get actual darkness values
-              const sourceX = Math.max(0, Math.min(image.width - 1, Math.round(cx / scale * (image.width / tempCanvas.width))));
-              const sourceY = Math.max(0, Math.min(image.height - 1, Math.round(cy / scale * (image.height / tempCanvas.height))));
-              const sourceIdx = (sourceY * image.width + sourceX) * 4;
-              
-              if (sourceIdx + 2 < sourceImageData.data.length) {
-                const gray = getGray(sourceImageData.data, sourceIdx);
-                const darkness = 1 - gray;
-                const radius = Math.sqrt(darkness) * radiusMultiplier;
-                
-                if (radius >= 0.5) {
-                  svg += `    <circle cx="${cx}" cy="${cy}" r="${radius * scale}"/>\n`;
-                }
-              }
-            }
-          }
-        } else {
-          // For other gradient patterns, limit to reasonable resolution
-          const pixelSize = Math.max(2, Math.ceil(Math.max(svgWidth, svgHeight) / 500)); // Limit to ~500 elements per dimension
-          for (let y = 0; y < svgHeight; y += pixelSize) {
-            for (let x = 0; x < svgWidth; x += pixelSize) {
-              // Sample from original source image
-              const srcX = Math.round(x / scale * (image.width / tempCanvas.width));
-              const srcY = Math.round(y / scale * (image.height / tempCanvas.height));
-              const idx = (srcY * image.width + srcX) * 4;
-              if (idx + 2 < sourceImageData.data.length) {
-                const gray = (sourceImageData.data[idx] + sourceImageData.data[idx + 1] + sourceImageData.data[idx + 2]) / 3;
-                if (gray < 200) {
-                  svg += `    <rect x="${x}" y="${y}" width="${pixelSize}" height="${pixelSize}"/>\n`;
-                }
-              }
-            }
-          }
-        }
-        
-        svg += `  </g>\n`;
-      } else if (debouncedLayers.length > 0) {
-        // Layer mode - apply blend modes to match canvas rendering
-        const blendModeMap = {
-          'normal': 'normal',
-          'multiply': 'multiply',
-          'screen': 'screen',
-          'overlay': 'overlay',
-          'darken': 'darken',
-          'lighten': 'lighten'
-        };
-        
-        debouncedLayers.forEach((layer, layerIdx) => {
-          if (layer.visible === false) return;
-          
-          const color = DOMO_PALETTE[layer.colorKey];
-          if (!color) return;
-          
-          const svgBlendMode = blendModeMap[layer.blendMode] || 'multiply';
-          svg += `  <g id="${color.name}" fill="${color.hex}" opacity="${layer.opacity}" style="mix-blend-mode: ${svgBlendMode};">\n`;
-          
-          const algoInfo = DITHER_ALGORITHMS[layer.ditherType];
-          
-          // For halftone patterns, generate circles
-          if (algoInfo?.category === 'halftone' && layer.ditherType === 'halftoneCircle') {
-          // Scale the dither scale to match export dimensions
-          const scaledLayerScale = layer.scale * ditherScaleFactor;
-          const step = Math.max(3, Math.floor(scaledLayerScale));
-          const maxRadius = step * 0.48;
-          const rad = (layer.angle * Math.PI) / 180;
-          const cos = Math.cos(rad);
-          const sin = Math.sin(rad);
-          const radiusMultiplier = maxRadius * (0.6 + layer.threshold * 0.7);
-          const wHalf = svgWidth * 0.5;
-          const hHalf = svgHeight * 0.5;
-          
-          // Match the algorithm's grid bounds calculation (same as halftoneCircle function)
-          const gridExtent = Math.max(svgWidth, svgHeight) * 2;
-          const gridStart = -gridExtent;
-          const gridEnd = gridExtent;
-          const minGridX = Math.floor((gridStart - wHalf) / step) * step;
-          const maxGridX = Math.ceil((gridEnd - wHalf) / step) * step;
-          const minGridY = Math.floor((gridStart - hHalf) / step) * step;
-          const maxGridY = Math.ceil((gridEnd - hHalf) / step) * step;
-          
-          for (let gy = minGridY; gy <= maxGridY; gy += step) {
-            for (let gx = minGridX; gx <= maxGridX; gx += step) {
-              // Apply layer offsets to match canvas rendering
-              const offsetGx = gx - (layer.offsetX * ditherScaleFactor);
-              const offsetGy = gy - (layer.offsetY * ditherScaleFactor);
-              const cx = offsetGx * cos - offsetGy * sin + wHalf;
-              const cy = offsetGx * sin + offsetGy * cos + hHalf;
-              
-              if (cx < -step || cx >= svgWidth + step || cy < -step || cy >= svgHeight + step) continue;
-              
-              // Sample from original source image to get actual darkness values
-              const sourceX = Math.max(0, Math.min(image.width - 1, Math.round(cx / scale * (image.width / tempCanvas.width))));
-              const sourceY = Math.max(0, Math.min(image.height - 1, Math.round(cy / scale * (image.height / tempCanvas.height))));
-              const sourceIdx = (sourceY * image.width + sourceX) * 4;
-              
-              if (sourceIdx + 2 < sourceImageData.data.length) {
-                const gray = getGray(sourceImageData.data, sourceIdx);
-                const darkness = 1 - gray;
-                const radius = Math.sqrt(darkness) * radiusMultiplier;
-                
-                if (radius >= 0.5) {
-                  // Use darkness-based opacity to match canvas rendering (darkness already accounts for layer opacity via blend mode)
-                  svg += `    <circle cx="${cx}" cy="${cy}" r="${radius * scale}"/>\n`;
-                }
-              }
-            }
-          }
-        } else {
-          // For other patterns, limit to reasonable resolution
-          const pixelSize = Math.max(2, Math.ceil(Math.max(svgWidth, svgHeight) / 500)); // Limit to ~500 elements per dimension
-          for (let y = 0; y < svgHeight; y += pixelSize) {
-            for (let x = 0; x < svgWidth; x += pixelSize) {
-              // Apply layer offsets to match canvas rendering
-              const offsetX = x - (layer.offsetX * ditherScaleFactor * scale);
-              const offsetY = y - (layer.offsetY * ditherScaleFactor * scale);
-              // Sample from original source image
-              const srcX = Math.round(offsetX / scale * (image.width / tempCanvas.width));
-              const srcY = Math.round(offsetY / scale * (image.height / tempCanvas.height));
-              const idx = (srcY * image.width + srcX) * 4;
-              if (idx + 2 < sourceImageData.data.length && srcX >= 0 && srcX < image.width && srcY >= 0 && srcY < image.height) {
-                const gray = (sourceImageData.data[idx] + sourceImageData.data[idx + 1] + sourceImageData.data[idx + 2]) / 3;
-                if (gray < 200) { // Threshold for dark pixels
-                  // Use darkness-based opacity to match canvas rendering
-                  const darkness = 1 - (gray / 255);
-                  const rectOpacity = Math.max(0.1, darkness);
-                  svg += `    <rect x="${x}" y="${y}" width="${pixelSize}" height="${pixelSize}" opacity="${rectOpacity}"/>\n`;
-                }
-              }
-            }
-          }
-          }
-          
-          svg += `  </g>\n`;
-        });
-      } else {
-        // No gradient or layers - just export background
-        console.log('No gradient or layers enabled, exporting background only');
+      // Apply adjustments to match preview processing
+      if (debouncedBrightness !== 0 || debouncedContrast !== 0) {
+        imageData = applyBrightnessContrast(imageData, debouncedBrightness, debouncedContrast);
+      }
+      if (invert) {
+        imageData = invertImageData(imageData);
       }
       
-      svg += `</svg>`;
+      return imageData;
+    }
+    
+    // Calculate processing dimensions that maintain aspect ratio
+    // Fit within processingResolution bounds while preserving image aspect ratio
+    const { w: maxWidth, h: maxHeight } = processingResolution;
+    const imageAspect = image.width / image.height;
+    const targetAspect = maxWidth / maxHeight;
+    
+    let targetWidth, targetHeight;
+    if (imageAspect > targetAspect) {
+      // Image is wider - fit to width
+      targetWidth = maxWidth;
+      targetHeight = Math.round(maxWidth / imageAspect);
+    } else {
+      // Image is taller - fit to height
+      targetHeight = maxHeight;
+      targetWidth = Math.round(maxHeight * imageAspect);
+    }
+    
+    // Downsample to processing resolution
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = targetWidth;
+    tempCanvas.height = targetHeight;
+    const tempCtx = tempCanvas.getContext('2d');
+    
+    // Disable image smoothing for crisp downsampling (pixelated look)
+    tempCtx.imageSmoothingEnabled = false;
+    
+    // Apply pre-blur if enabled (matching preview processing)
+    if (preBlur > 0) {
+      tempCtx.filter = `blur(${preBlur}px)`;
+    }
+    tempCtx.drawImage(image, 0, 0, targetWidth, targetHeight);
+    tempCtx.filter = 'none';
+    
+    let imageData = tempCtx.getImageData(0, 0, targetWidth, targetHeight);
+    
+    // Apply adjustments to match preview processing
+    if (debouncedBrightness !== 0 || debouncedContrast !== 0) {
+      imageData = applyBrightnessContrast(imageData, debouncedBrightness, debouncedContrast);
+    }
+    if (invert) {
+      imageData = invertImageData(imageData);
+    }
+    
+    return imageData;
+  }, [image, debouncedBrightness, debouncedContrast, invert, preBlur]);
+  
+  // Export combined SVG (all layers in one file)
+  const exportSVGCombined = useCallback(() => {
+    if (!image || !previewImage) {
+      showToast('No image loaded');
+      return;
+    }
+    
+    try {
+      // Use the same scaled processing resolution as the preview
+      // Preview processes at previewImage.width * imageScale (matching processImageCore)
+      const scaledWidth = Math.round(previewImage.width * debouncedImageScale);
+      const scaledHeight = Math.round(previewImage.height * debouncedImageScale);
+      const processingResolution = { w: scaledWidth, h: scaledHeight };
       
-      console.log('SVG generated', { length: svg.length, svgWidth, svgHeight });
+      const sourceImageData = getSourceImageData(processingResolution);
+      if (!sourceImageData) return;
       
-      // Download SVG
-      const blob = new Blob([svg], { type: 'image/svg+xml' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'domo-dither.svg';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      // Dimensions match the actual downsampled image dimensions (maintains aspect ratio)
+      const dimensions = {
+        width: sourceImageData.width,
+        height: sourceImageData.height
+      };
       
-      console.log('SVG download triggered');
-      showToast('Exported SVG');
+      // scaleFactor is 1 since we're processing at target resolution
+      const svg = generateCombinedSVG(
+        debouncedLayers,
+        sourceImageData,
+        dimensions,
+        backgroundColor,
+        { scaleFactor: 1 }
+      );
+      
+      downloadSVG(svg, 'halftone-combined.svg');
+      
+      const estimatedSize = estimateSVGSize(debouncedLayers, dimensions, 1);
+      const sizeKB = Math.round(estimatedSize / 1024);
+      showToast(`Exported combined SVG (~${sizeKB}KB)`);
     } catch (error) {
       console.error('SVG export error:', error);
       showToast('SVG export failed: ' + error.message);
     }
-  };
-
-  const gradientAlgoInfo = useMemo(() => DITHER_ALGORITHMS[gradientDitherType], [gradientDitherType]);
+  }, [image, previewImage, debouncedImageScale, debouncedLayers, backgroundColor, getSourceImageData]);
+  
+  // Export separate SVG layers as ZIP
+  const exportSVGLayers = useCallback(async () => {
+    if (!image || !previewImage) {
+      showToast('No image loaded');
+      return;
+    }
+    
+    try {
+      showToast('Generating layer files...');
+      
+      // Use the same scaled processing resolution as the preview
+      // Preview processes at previewImage.width * imageScale (matching processImageCore)
+      const scaledWidth = Math.round(previewImage.width * debouncedImageScale);
+      const scaledHeight = Math.round(previewImage.height * debouncedImageScale);
+      const processingResolution = { w: scaledWidth, h: scaledHeight };
+      
+      const sourceImageData = getSourceImageData(processingResolution);
+      if (!sourceImageData) return;
+      
+      // Dimensions match the actual downsampled image dimensions (maintains aspect ratio)
+      const dimensions = {
+        width: sourceImageData.width,
+        height: sourceImageData.height
+      };
+      
+      // scaleFactor is 1 since we're processing at target resolution
+      await exportLayersAsZip(
+        debouncedLayers,
+        sourceImageData,
+        dimensions,
+        backgroundColor,
+        { scaleFactor: 1 }
+      );
+      
+      const visibleLayers = debouncedLayers.filter(l => l.visible !== false);
+      showToast(`Exported ${visibleLayers.length} layer${visibleLayers.length !== 1 ? 's' : ''} as ZIP`);
+    } catch (error) {
+      console.error('SVG layers export error:', error);
+      showToast('SVG export failed: ' + error.message);
+    }
+  }, [image, previewImage, debouncedImageScale, debouncedLayers, backgroundColor, getSourceImageData]);
 
   return (
     <DropZone onDrop={loadImageFile}>
@@ -896,7 +861,7 @@ export default function DomoDitherTool() {
           
           {/* Header */}
           <div style={{ padding: '20px 16px', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h1 style={{ fontSize: '11px', letterSpacing: '0.2em', margin: 0, fontWeight: 400 }}>DOMO DITHER</h1>
+            <h1 style={{ fontSize: '11px', letterSpacing: '0.2em', margin: 0, fontWeight: 400 }}>HALFTONE LAB</h1>
             <IconButton onClick={resetAll} title="Reset all">↺</IconButton>
           </div>
           
@@ -915,6 +880,57 @@ export default function DomoDitherTool() {
                 <Button onClick={randomizeLayers}>↻ RANDOMIZE</Button>
               </>
             )}
+          </Section>
+          
+          {/* Palette Section */}
+          <Section title="PALETTE" defaultOpen={false}>
+            <div style={{ display: 'flex', gap: '4px', marginBottom: '12px' }}>
+              <Button 
+                onClick={togglePaletteMode} 
+                active={paletteMode === 'default'} 
+                style={{ flex: 1, fontSize: '9px' }}
+              >
+                DEFAULT
+              </Button>
+              <Button 
+                onClick={togglePaletteMode} 
+                active={paletteMode === 'custom'} 
+                style={{ flex: 1, fontSize: '9px' }}
+              >
+                CUSTOM
+              </Button>
+            </div>
+            
+            {/* Palette preview */}
+            <div style={{ 
+              display: 'flex', 
+              gap: '2px', 
+              marginBottom: '12px',
+              height: '24px'
+            }}>
+              {colorKeys.map(key => (
+                <div 
+                  key={key} 
+                  style={{ 
+                    flex: 1, 
+                    backgroundColor: activePalette[key]?.hex || '#000',
+                    border: '1px solid #333'
+                  }} 
+                  title={activePalette[key]?.name || key}
+                />
+              ))}
+            </div>
+            
+            <Button onClick={() => setShowPaletteEditor(true)} style={{ opacity: 0.7 }}>
+              {Object.keys(customPalette).length > 0 ? 'EDIT CUSTOM COLORS' : '+ ADD CUSTOM COLORS'}
+            </Button>
+            
+            <p style={{ fontSize: '9px', color: '#444', margin: '8px 0 0 0' }}>
+              {paletteMode === 'default' 
+                ? 'Using default palette' 
+                : `Using ${Object.keys(customPalette).length} custom color${Object.keys(customPalette).length !== 1 ? 's' : ''}`
+              }
+            </p>
           </Section>
           
           {/* Presets Section */}
@@ -948,9 +964,41 @@ export default function DomoDitherTool() {
               </>
             )}
             
-            <Button onClick={() => setShowSaveModal(true)} style={{ opacity: 0.7 }}>
+            <Button onClick={() => setShowSaveModal(true)} style={{ marginBottom: '12px' }}>
               + SAVE CURRENT AS PRESET
             </Button>
+            
+            {/* Export/Import */}
+            <div style={{ borderTop: '1px solid #222', paddingTop: '12px', marginTop: '4px' }}>
+              <label style={{ display: 'block', color: '#666', fontSize: '10px', marginBottom: '8px', fontFamily: 'monospace' }}>
+                SHARE PRESETS
+              </label>
+              <input 
+                ref={presetImportRef}
+                type="file" 
+                accept=".json" 
+                onChange={importPresetsFromJSON} 
+                style={{ display: 'none' }} 
+              />
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <Tooltip text="Export all saved presets as JSON">
+                  <Button 
+                    onClick={exportPresetsAsJSON} 
+                    style={{ flex: 1, fontSize: '9px', opacity: Object.keys(customPresets).length > 0 ? 1 : 0.4 }}
+                  >
+                    EXPORT
+                  </Button>
+                </Tooltip>
+                <Tooltip text="Import presets from JSON file">
+                  <Button 
+                    onClick={() => presetImportRef.current?.click()} 
+                    style={{ flex: 1, fontSize: '9px' }}
+                  >
+                    IMPORT
+                  </Button>
+                </Tooltip>
+              </div>
+            </div>
           </Section>
           
           {/* Adjustments Section */}
@@ -1001,77 +1049,8 @@ export default function DomoDitherTool() {
             </p>
           </Section>
           
-          {/* Gradient Map Section */}
-          <Section title="GRADIENT MAP" defaultOpen={false}>
-            <Button onClick={() => setGradientEnabled(!gradientEnabled)} active={gradientEnabled} style={{ marginBottom: '16px' }}>
-              {gradientEnabled ? 'ENABLED' : 'DISABLED'}
-            </Button>
-            
-            {gradientEnabled && (
-              <>
-                <label style={{ display: 'block', color: '#666', fontSize: '10px', marginBottom: '8px', fontFamily: 'monospace' }}>
-                  COLORS ({gradientColors.length}/4)
-                </label>
-                
-                <div style={{ 
-                  height: '24px', 
-                  marginBottom: '16px', 
-                  background: `linear-gradient(to right, ${gradientColors.map((c, i) => `${DOMO_PALETTE[c]?.hex || '#000'} ${(i / (gradientColors.length - 1)) * 100}%`).join(', ')})`,
-                  border: '1px solid #333'
-                }} />
-                
-                {gradientColors.map((colorKey, i) => (
-                  <div key={i} style={{ marginBottom: '12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', marginBottom: '6px' }}>
-                      <span style={{ color: '#666', fontSize: '10px' }}>STOP {i + 1}</span>
-                      {gradientColors.length > 2 && (
-                        <IconButton onClick={() => removeGradientColor(i)} style={{ marginLeft: 'auto' }}>×</IconButton>
-                      )}
-                    </div>
-                    <div style={{ display: 'flex', gap: '3px' }}>
-                      {ALL_COLOR_KEYS.map(key => (
-                        <ColorSwatch
-                          key={key}
-                          colorKey={key}
-                          color={DOMO_PALETTE[key]}
-                          selected={colorKey === key}
-                          onClick={() => {
-                            const newColors = [...gradientColors];
-                            newColors[i] = key;
-                            setGradientColors(newColors);
-                          }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                ))}
-                
-                {gradientColors.length < 4 && (
-                  <Button onClick={addGradientColor} style={{ marginBottom: '16px' }}>+ ADD STOP</Button>
-                )}
-                
-                <div style={{ borderTop: '1px solid #222', paddingTop: '16px', marginTop: '8px' }}>
-                  <AlgorithmSelect value={gradientDitherType} onChange={setGradientDitherType} includeNone />
-                  
-                  {gradientDitherType !== 'none' && (
-                    <>
-                      <Slider label={`DENSITY ${Math.round(gradientDitherThreshold * 100)}%`} value={gradientDitherThreshold} min={0} max={1} step={0.01} onChange={setGradientDitherThreshold} />
-                      {gradientAlgoInfo?.hasScale && (
-                        <Slider label={`SIZE ${gradientDitherScale}px`} value={gradientDitherScale} min={2} max={32} step={1} onChange={setGradientDitherScale} />
-                      )}
-                      {gradientAlgoInfo?.hasAngle && (
-                        <Slider label={`ANGLE ${gradientDitherAngle}°`} value={gradientDitherAngle} min={0} max={180} step={5} onChange={setGradientDitherAngle} />
-                      )}
-                    </>
-                  )}
-                </div>
-              </>
-            )}
-          </Section>
-          
           {/* Layers Section */}
-          {!gradientEnabled && (
-            <Section title={`LAYERS ${layers.length}/4`}>
+          <Section title={`LAYERS ${layers.length}/4`}>
               {layers.map((layer, i) => (
                 <LayerPanel
                   key={layer.id}
@@ -1084,21 +1063,22 @@ export default function DomoDitherTool() {
                   onMoveUp={() => moveLayerUp(i)}
                   onMoveDown={() => moveLayerDown(i)}
                   canRemove={layers.length > 1}
+                  palette={activePalette}
                 />
               ))}
               {layers.length < 4 && (
                 <Button onClick={addLayer}>+ ADD LAYER</Button>
               )}
-            </Section>
-          )}
+          </Section>
           
           {/* Output Section */}
           <Section title="OUTPUT">
             <ColorPicker 
               value={backgroundColor === '#ffffff' ? 'white' : backgroundColor === '#000000' ? 'black' : ''} 
-              onChange={(k) => setBackgroundColor(DOMO_PALETTE[k].hex)} 
+              onChange={(k) => setBackgroundColor(activePalette[k].hex)} 
               label="BACKGROUND" 
               showAll 
+              palette={activePalette}
             />
             
             <label style={{ display: 'block', color: '#666', fontSize: '10px', marginBottom: '8px', fontFamily: 'monospace' }}>RESOLUTION</label>
@@ -1113,7 +1093,29 @@ export default function DomoDitherTool() {
             {image && (
               <>
                 <Button primary onClick={exportPNG} style={{ marginBottom: '8px' }}>EXPORT PNG</Button>
-                <Button onClick={exportSVG}>EXPORT SVG</Button>
+                
+                {/* SVG Export Options */}
+                <label style={{ display: 'block', color: '#666', fontSize: '10px', marginBottom: '8px', marginTop: '16px', fontFamily: 'monospace' }}>
+                  SVG EXPORT
+                </label>
+                <div style={{ display: 'flex', gap: '4px', marginBottom: '8px' }}>
+                  <Tooltip text="Single SVG with all layers as groups">
+                    <Button 
+                      onClick={exportSVGCombined} 
+                      style={{ flex: 1, fontSize: '9px' }}
+                    >
+                      COMBINED
+                    </Button>
+                  </Tooltip>
+                  <Tooltip text="ZIP file with separate SVG per layer">
+                    <Button 
+                      onClick={exportSVGLayers}
+                      style={{ flex: 1, fontSize: '9px' }}
+                    >
+                      LAYERS (ZIP)
+                    </Button>
+                  </Tooltip>
+                </div>
               </>
             )}
           </Section>
@@ -1275,6 +1277,14 @@ export default function DomoDitherTool() {
           <SavePresetModal 
             onSave={saveCustomPreset} 
             onCancel={() => setShowSaveModal(false)} 
+          />
+        )}
+        
+        {showPaletteEditor && (
+          <PaletteEditor 
+            palette={customPalette}
+            onSave={handleSavePalette}
+            onCancel={() => setShowPaletteEditor(false)}
           />
         )}
       </div>

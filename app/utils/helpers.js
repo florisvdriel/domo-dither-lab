@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 // Debounce hook
 export function useDebounce(value, delay) {
@@ -10,6 +10,55 @@ export function useDebounce(value, delay) {
   }, [value, delay]);
   
   return debouncedValue;
+}
+
+// Throttle hook - ensures function is called at most once per interval
+export function useThrottle(value, interval) {
+  const [throttledValue, setThrottledValue] = useState(value);
+  const lastExecuted = useRef(Date.now());
+
+  useEffect(() => {
+    const now = Date.now();
+    const elapsed = now - lastExecuted.current;
+    
+    if (elapsed >= interval) {
+      lastExecuted.current = now;
+      setThrottledValue(value);
+    } else {
+      const handler = setTimeout(() => {
+        lastExecuted.current = Date.now();
+        setThrottledValue(value);
+      }, interval - elapsed);
+      return () => clearTimeout(handler);
+    }
+  }, [value, interval]);
+
+  return throttledValue;
+}
+
+// Debounced callback hook - returns a debounced version of a callback
+export function useDebouncedCallback(callback, delay) {
+  const timeoutRef = useRef(null);
+  
+  const debouncedCallback = useCallback((...args) => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    timeoutRef.current = setTimeout(() => {
+      callback(...args);
+    }, delay);
+  }, [callback, delay]);
+  
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+  
+  return debouncedCallback;
 }
 
 // Seeded random for consistent noise

@@ -1,10 +1,49 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 
-export default function Slider({ value, min, max, step, onChange, label }) {
+export default function Slider({ value, min, max, step, onChange, label, debounceMs = 0 }) {
   const percent = ((value - min) / (max - min)) * 100;
   const [hovering, setHovering] = useState(false);
+  const [localValue, setLocalValue] = useState(value);
+  const timeoutRef = useRef(null);
+  const isDraggingRef = useRef(false);
+  
+  // Sync local value when external value changes (and not dragging)
+  if (!isDraggingRef.current && localValue !== value) {
+    setLocalValue(value);
+  }
+  
+  const handleChange = useCallback((e) => {
+    const newValue = parseFloat(e.target.value);
+    setLocalValue(newValue);
+    isDraggingRef.current = true;
+    
+    if (debounceMs > 0) {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      timeoutRef.current = setTimeout(() => {
+        onChange(newValue);
+        isDraggingRef.current = false;
+      }, debounceMs);
+    } else {
+      onChange(newValue);
+      isDraggingRef.current = false;
+    }
+  }, [onChange, debounceMs]);
+  
+  const handleMouseUp = useCallback(() => {
+    // Immediately fire the change on mouse up for responsiveness
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    onChange(localValue);
+    isDraggingRef.current = false;
+  }, [onChange, localValue]);
+  
+  const displayPercent = ((localValue - min) / (max - min)) * 100;
   
   return (
     <div style={{ marginBottom: '16px' }}>
@@ -42,7 +81,7 @@ export default function Slider({ value, min, max, step, onChange, label }) {
         
         <div style={{ 
           position: 'absolute',
-          left: `${percent}%`,
+          left: `${displayPercent}%`,
           transform: 'translateX(-50%)',
           width: hovering ? '10px' : '8px',
           height: hovering ? '10px' : '8px',
@@ -56,8 +95,10 @@ export default function Slider({ value, min, max, step, onChange, label }) {
           min={min} 
           max={max} 
           step={step} 
-          value={value}
-          onChange={(e) => onChange(parseFloat(e.target.value))}
+          value={localValue}
+          onChange={handleChange}
+          onMouseUp={handleMouseUp}
+          onTouchEnd={handleMouseUp}
           style={{ 
             position: 'absolute', 
             width: '100%', 

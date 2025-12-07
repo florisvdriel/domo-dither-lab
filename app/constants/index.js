@@ -14,7 +14,8 @@ export const EXPORT_RESOLUTIONS = {
 };
 
 // Preview resolution limit for performance
-export const PREVIEW_MAX_WIDTH = 1500;
+// Lower values = faster preview, higher values = more detail
+export const PREVIEW_MAX_WIDTH = 1200;
 
 // Default state values
 export const DEFAULT_STATE = {
@@ -27,19 +28,11 @@ export const DEFAULT_STATE = {
   inkBleedAmount: 0.5,
   inkBleedRoughness: 0.5,
   paperTexture: false,
-  gradientEnabled: false,
-  gradientColors: ['black', 'white'],
-  gradientDitherType: 'none',
-  gradientDitherScale: 8,
-  gradientDitherAngle: 15,
-  gradientDitherThreshold: 0.5,
-  backgroundColor: '#000000',
+  backgroundColor: '#ffffff',
   exportResolution: '1x',
   viewportSize: { w: 1080, h: 1080 },
   imageTransform: { x: 0, y: 0, scale: 1 },
   layers: [
-    { id: 1, colorKey: 'hearth', ditherType: 'halftoneCircle', threshold: 0.5, scale: 8, angle: 15, offsetX: 0, offsetY: 0, blendMode: 'multiply', opacity: 1, visible: true }
+    { id: 1, colorKey: 'coral', ditherType: 'halftoneCircle', threshold: 0.5, scale: 8, angle: 15, offsetX: 0, offsetY: 0, blendMode: 'multiply', opacity: 1, visible: true }
   ]
 };
-
-

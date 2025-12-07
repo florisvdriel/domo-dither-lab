@@ -1,5 +1,4 @@
-import { getGray, GRAY_R, GRAY_G, GRAY_B } from './helpers';
-import { DOMO_PALETTE } from '../constants/palette';
+import { GRAY_R, GRAY_G, GRAY_B } from './helpers';
 
 // Apply brightness and contrast (optimized)
 export function applyBrightnessContrast(imageData, brightness, contrast) {
@@ -156,40 +155,5 @@ export function applyInkBleed(imageData, amount, roughness = 0.5) {
   return new ImageData(result, w, h);
 }
 
-// Interpolate between colors
-function interpolateColor(color1, color2, t) {
-  return [
-    Math.round(color1[0] + (color2[0] - color1[0]) * t),
-    Math.round(color1[1] + (color2[1] - color1[1]) * t),
-    Math.round(color1[2] + (color2[2] - color1[2]) * t)
-  ];
-}
-
-// Apply gradient map (optimized)
-export function applyGradientMap(imageData, gradientColors) {
-  const data = new Uint8ClampedArray(imageData.data);
-  const colors = gradientColors.map(key => DOMO_PALETTE[key]?.rgb || [0, 0, 0]);
-  const numStops = colors.length;
-  const len = data.length;
-  const stopsMinusOne = numStops - 1;
-  
-  for (let i = 0; i < len; i += 4) {
-    const gray = getGray(data, i);
-    
-    const scaledPos = gray * stopsMinusOne;
-    const index = Math.min(Math.floor(scaledPos), numStops - 2);
-    const t = scaledPos - index;
-    
-    const c1 = colors[index];
-    const c2 = colors[index + 1];
-    const oneMinusT = 1 - t;
-    
-    data[i] = Math.round(c1[0] * oneMinusT + c2[0] * t);
-    data[i + 1] = Math.round(c1[1] * oneMinusT + c2[1] * t);
-    data[i + 2] = Math.round(c1[2] * oneMinusT + c2[2] * t);
-  }
-  
-  return new ImageData(data, imageData.width, imageData.height);
-}
 
 

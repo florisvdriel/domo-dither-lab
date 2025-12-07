@@ -1,7 +1,31 @@
-import { getGray, BAYER_2x2, BAYER_4x4, BAYER_8x8, GRAY_R, GRAY_G, GRAY_B, seededRandom } from './helpers';
+/**
+ * Web Worker for off-main-thread dithering calculations
+ * Prevents UI jank during parameter adjustments
+ */
+
+// Grayscale calculation constants
+const GRAY_R = 0.299;
+const GRAY_G = 0.587;
+const GRAY_B = 0.114;
+const GRAY_INV = 1 / 255;
+
+function getGray(data, i) {
+  return (data[i] * GRAY_R + data[i+1] * GRAY_G + data[i+2] * GRAY_B) * GRAY_INV;
+}
+
+// Seeded random for consistent noise
+function seededRandom(seed) {
+  const x = Math.sin(seed) * 10000;
+  return x - Math.floor(x);
+}
+
+// Bayer matrices
+const BAYER_2x2 = [[0,2],[3,1]].map(r => r.map(v => v/4));
+const BAYER_4x4 = [[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]].map(r => r.map(v => v/16));
+const BAYER_8x8 = [[0,32,8,40,2,34,10,42],[48,16,56,24,50,18,58,26],[12,44,4,36,14,46,6,38],[60,28,52,20,62,30,54,22],[3,35,11,43,1,33,9,41],[51,19,59,27,49,17,57,25],[15,47,7,39,13,45,5,37],[63,31,55,23,61,29,53,21]].map(r => r.map(v => v/64));
 
 // Dithering Algorithms
-export const ditherAlgorithms = {
+const ditherAlgorithms = {
   none: (imageData) => imageData,
   
   bayer2x2: (imageData, threshold, scale = 1) => {
@@ -24,7 +48,7 @@ export const ditherAlgorithms = {
         data[i] = data[i+1] = data[i+2] = result;
       }
     }
-    return new ImageData(data, w, h);
+    return { data, width: w, height: h };
   },
 
   bayer4x4: (imageData, threshold, scale = 1) => {
@@ -47,7 +71,7 @@ export const ditherAlgorithms = {
         data[i] = data[i+1] = data[i+2] = result;
       }
     }
-    return new ImageData(data, w, h);
+    return { data, width: w, height: h };
   },
 
   bayer8x8: (imageData, threshold, scale = 1) => {
@@ -70,7 +94,7 @@ export const ditherAlgorithms = {
         data[i] = data[i+1] = data[i+2] = result;
       }
     }
-    return new ImageData(data, w, h);
+    return { data, width: w, height: h };
   },
 
   floydSteinberg: (imageData, threshold, scale = 1) => {
@@ -84,7 +108,6 @@ export const ditherAlgorithms = {
     const sh = Math.ceil(h * invPixelScale);
     const gray = new Float32Array(sw * sh);
     
-    // Pre-calculate pixel bounds for sampling
     for (let sy = 0; sy < sh; sy++) {
       const syStart = sy * pixelScale;
       const syEnd = Math.min(syStart + pixelScale, h);
@@ -105,7 +128,6 @@ export const ditherAlgorithms = {
       }
     }
     
-    // Error diffusion
     const error7_16 = 7 / 16;
     const error3_16 = 3 / 16;
     const error5_16 = 5 / 16;
@@ -129,7 +151,6 @@ export const ditherAlgorithms = {
       }
     }
     
-    // Map back to full resolution
     for (let y = 0; y < h; y++) {
       const sy = Math.floor(y * invPixelScale);
       const yw = y * w;
@@ -140,7 +161,7 @@ export const ditherAlgorithms = {
         data[idx] = data[idx+1] = data[idx+2] = val;
       }
     }
-    return new ImageData(data, w, h);
+    return { data, width: w, height: h };
   },
 
   atkinson: (imageData, threshold, scale = 1) => {
@@ -154,7 +175,6 @@ export const ditherAlgorithms = {
     const sh = Math.ceil(h * invPixelScale);
     const gray = new Float32Array(sw * sh);
     
-    // Pre-calculate pixel bounds for sampling
     for (let sy = 0; sy < sh; sy++) {
       const syStart = sy * pixelScale;
       const syEnd = Math.min(syStart + pixelScale, h);
@@ -175,7 +195,6 @@ export const ditherAlgorithms = {
       }
     }
     
-    // Error diffusion (Atkinson)
     const errorDiv = 1 / 8;
     for (let y = 0; y < sh; y++) {
       const yw = y * sw;
@@ -197,7 +216,6 @@ export const ditherAlgorithms = {
       }
     }
     
-    // Map back to full resolution
     for (let y = 0; y < h; y++) {
       const sy = Math.floor(y * invPixelScale);
       const yw = y * w;
@@ -208,7 +226,7 @@ export const ditherAlgorithms = {
         data[idx] = data[idx+1] = data[idx+2] = val;
       }
     }
-    return new ImageData(data, w, h);
+    return { data, width: w, height: h };
   },
 
   halftoneCircle: (imageData, threshold, dotSize = 6, angle = 15) => {
@@ -226,23 +244,17 @@ export const ditherAlgorithms = {
     const wHalf = w * 0.5;
     const hHalf = h * 0.5;
     
-    // OPTIMIZED: Calculate tight grid bounds based on rotated canvas corners
-    // The grid only needs to cover points that could possibly affect visible pixels
+    // Optimized: tighter grid bounds based on actual visible area
     const diagonal = Math.sqrt(w * w + h * h);
-    const gridExtent = diagonal * 0.6; // ~1.2x coverage instead of 4x
+    const gridExtent = diagonal * 0.6; // Reduced from 2x to ~1.2x
+    const minGrid = -gridExtent;
+    const maxGrid = gridExtent;
     
-    // Pre-calculate bounds for grid iteration
-    const minGridX = Math.floor(-gridExtent / step) * step;
-    const maxGridX = Math.ceil(gridExtent / step) * step;
-    const minGridY = Math.floor(-gridExtent / step) * step;
-    const maxGridY = Math.ceil(gridExtent / step) * step;
-    
-    for (let gy = minGridY; gy <= maxGridY; gy += step) {
-      for (let gx = minGridX; gx <= maxGridX; gx += step) {
+    for (let gy = minGrid; gy <= maxGrid; gy += step) {
+      for (let gx = minGrid; gx <= maxGrid; gx += step) {
         const cx = gx * cos - gy * sin + wHalf;
         const cy = gx * sin + gy * cos + hHalf;
         
-        // Early bounds check
         if (cx < -step || cx >= w + step || cy < -step || cy >= h + step) continue;
         
         const sampleX = Math.max(0, Math.min(w - 1, Math.round(cx)));
@@ -261,7 +273,6 @@ export const ditherAlgorithms = {
         const minY = Math.max(0, Math.floor(cy - radiusWithPadding));
         const maxY = Math.min(h - 1, Math.ceil(cy + radiusWithPadding));
         
-        // Pre-calculate radius squared to avoid sqrt in inner loop
         const radiusSq = radiusWithPadding * radiusWithPadding;
         
         for (let py = minY; py <= maxY; py++) {
@@ -286,7 +297,7 @@ export const ditherAlgorithms = {
         }
       }
     }
-    return new ImageData(data, w, h);
+    return { data, width: w, height: h };
   },
 
   halftoneLines: (imageData, threshold, lineSpacing = 4, angle = 45) => {
@@ -325,7 +336,7 @@ export const ditherAlgorithms = {
         }
       }
     }
-    return new ImageData(data, w, h);
+    return { data, width: w, height: h };
   },
 
   halftoneSquare: (imageData, threshold, size = 6, angle = 0) => {
@@ -342,18 +353,14 @@ export const ditherAlgorithms = {
     const wHalf = w * 0.5;
     const hHalf = h * 0.5;
     
-    // OPTIMIZED: Calculate tight grid bounds based on rotated canvas corners
+    // Optimized: tighter grid bounds
     const diagonal = Math.sqrt(w * w + h * h);
-    const gridExtent = diagonal * 0.6; // ~1.2x coverage instead of 4x
+    const gridExtent = diagonal * 0.6;
+    const minGrid = -gridExtent;
+    const maxGrid = gridExtent;
     
-    // Pre-calculate bounds for grid iteration
-    const minGridX = Math.floor(-gridExtent / step) * step;
-    const maxGridX = Math.ceil(gridExtent / step) * step;
-    const minGridY = Math.floor(-gridExtent / step) * step;
-    const maxGridY = Math.ceil(gridExtent / step) * step;
-    
-    for (let gy = minGridY; gy <= maxGridY; gy += step) {
-      for (let gx = minGridX; gx <= maxGridX; gx += step) {
+    for (let gy = minGrid; gy <= maxGrid; gy += step) {
+      for (let gx = minGrid; gx <= maxGrid; gx += step) {
         const cx = gx * cos - gy * sin + wHalf;
         const cy = gx * sin + gy * cos + hHalf;
         
@@ -375,7 +382,6 @@ export const ditherAlgorithms = {
         const minY = Math.max(0, Math.floor(cy - extent));
         const maxY = Math.min(h - 1, Math.ceil(cy + extent));
         
-        // Pre-calculate rotated basis vectors
         const negSin = -sin;
         
         for (let py = minY; py <= maxY; py++) {
@@ -405,7 +411,7 @@ export const ditherAlgorithms = {
         }
       }
     }
-    return new ImageData(data, w, h);
+    return { data, width: w, height: h };
   },
 
   noise: (imageData, threshold, scale = 1) => {
@@ -430,37 +436,42 @@ export const ditherAlgorithms = {
         data[i] = data[i+1] = data[i+2] = result;
       }
     }
-    return new ImageData(data, w, h);
+    return { data, width: w, height: h };
   }
 };
 
-// Blend modes - optimized with pre-computed constants
-const INV_255 = 1 / 255;
-
-export const blendModes = {
-  normal: (base, blend, alpha) => blend * alpha + base * (1 - alpha),
-  multiply: (base, blend, alpha) => {
-    const result = base * blend * INV_255;
-    return result * alpha + base * (1 - alpha);
-  },
-  screen: (base, blend, alpha) => {
-    const result = 255 - (255 - base) * (255 - blend) * INV_255;
-    return result * alpha + base * (1 - alpha);
-  },
-  overlay: (base, blend, alpha) => {
-    const result = base < 128 
-      ? 2 * base * blend * INV_255 
-      : 255 - 2 * (255 - base) * (255 - blend) * INV_255;
-    return result * alpha + base * (1 - alpha);
-  },
-  darken: (base, blend, alpha) => {
-    const result = base < blend ? base : blend;
-    return result * alpha + base * (1 - alpha);
-  },
-  lighten: (base, blend, alpha) => {
-    const result = base > blend ? base : blend;
-    return result * alpha + base * (1 - alpha);
-  },
+// Message handler
+self.onmessage = function(e) {
+  const { type, id, algorithm, imageData, params } = e.data;
+  
+  if (type === 'dither') {
+    const algo = ditherAlgorithms[algorithm];
+    if (!algo) {
+      self.postMessage({ type: 'error', id, error: `Unknown algorithm: ${algorithm}` });
+      return;
+    }
+    
+    try {
+      const { threshold, scale, angle } = params;
+      let result;
+      
+      // Call algorithm with appropriate parameters
+      if (algorithm.startsWith('halftone')) {
+        result = algo(imageData, threshold, scale, angle);
+      } else if (algorithm === 'noise' || algorithm.startsWith('bayer') || algorithm === 'floydSteinberg' || algorithm === 'atkinson') {
+        result = algo(imageData, threshold, scale);
+      } else {
+        result = algo(imageData, threshold);
+      }
+      
+      // Transfer the buffer back for efficiency
+      self.postMessage(
+        { type: 'result', id, result },
+        [result.data.buffer]
+      );
+    } catch (error) {
+      self.postMessage({ type: 'error', id, error: error.message });
+    }
+  }
 };
-
 
