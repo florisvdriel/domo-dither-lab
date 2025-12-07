@@ -127,11 +127,10 @@ const DEFAULT_STATE = {
   gradientDitherScale: 8,
   gradientDitherAngle: 15,
   gradientDitherThreshold: 0.5,
-  backgroundColor: '#ffffff',
+  backgroundColor: '#000000',
   exportResolution: '1x',
   viewportSize: { w: 1080, h: 1080 },
   imageTransform: { x: 0, y: 0, scale: 1 },
-  showBackground: true,
   layers: [
     { id: 1, colorKey: 'hearth', ditherType: 'halftoneCircle', threshold: 0.5, scale: 8, angle: 15, offsetX: 0, offsetY: 0, blendMode: 'multiply', opacity: 1, visible: true }
   ]
@@ -513,11 +512,16 @@ const ditherAlgorithms = {
     const wHalf = w * 0.5;
     const hHalf = h * 0.5;
     
+    // Calculate grid bounds more efficiently (same as halftoneCircle)
     const gridExtent = Math.max(w, h) * 2;
-    const minGridX = Math.floor((gridExtent - wHalf) / step) * step;
-    const maxGridX = Math.ceil((gridExtent - wHalf) / step) * step;
-    const minGridY = Math.floor((gridExtent - hHalf) / step) * step;
-    const maxGridY = Math.ceil((gridExtent - hHalf) / step) * step;
+    const gridStart = -gridExtent;
+    const gridEnd = gridExtent;
+    
+    // Pre-calculate bounds for grid iteration
+    const minGridX = Math.floor((gridStart - wHalf) / step) * step;
+    const maxGridX = Math.ceil((gridEnd - wHalf) / step) * step;
+    const minGridY = Math.floor((gridStart - hHalf) / step) * step;
+    const maxGridY = Math.ceil((gridEnd - hHalf) / step) * step;
     
     for (let gy = minGridY; gy <= maxGridY; gy += step) {
       for (let gx = minGridX; gx <= maxGridX; gx += step) {
@@ -668,8 +672,7 @@ function applyInkBleed(imageData, amount, roughness = 0.5) {
   const roughnessFactor = 1 - roughness * 0.5;
   const bleedOpacity = 0.9;
   const oneMinusBleedOpacity = 1 - bleedOpacity;
-  const paperThreshold = 128;
-  const paperThresholdScaled = paperThreshold * 255; // For comparison with unscaled gray
+  const paperThreshold = 128; // Threshold in [0, 255] range
   
   // Pre-calculate neighbor offsets
   const neighborOffsets = [
@@ -695,7 +698,7 @@ function applyInkBleed(imageData, amount, roughness = 0.5) {
         
         // Check if current pixel is white (paper) - optimized gray calculation
         const gray = original[i] * GRAY_R + original[i + 1] * GRAY_G + original[i + 2] * GRAY_B;
-        const isPaper = gray >= paperThresholdScaled;
+        const isPaper = gray >= paperThreshold;
         
         if (isPaper) {
           // Check 4 neighbors (Up, Down, Left, Right) - optimized bounds checking
@@ -706,7 +709,7 @@ function applyInkBleed(imageData, amount, roughness = 0.5) {
           if (y > 0) {
             const ni = i + neighborOffsets[0];
             const neighborGray = original[ni] * GRAY_R + original[ni + 1] * GRAY_G + original[ni + 2] * GRAY_B;
-            if (neighborGray < paperThresholdScaled) {
+            if (neighborGray < paperThreshold) {
               hasInkNeighbor = true;
               inkR = original[ni];
               inkG = original[ni + 1];
@@ -718,7 +721,7 @@ function applyInkBleed(imageData, amount, roughness = 0.5) {
           if (!hasInkNeighbor && y < h - 1) {
             const ni = i + neighborOffsets[1];
             const neighborGray = original[ni] * GRAY_R + original[ni + 1] * GRAY_G + original[ni + 2] * GRAY_B;
-            if (neighborGray < paperThresholdScaled) {
+            if (neighborGray < paperThreshold) {
               hasInkNeighbor = true;
               inkR = original[ni];
               inkG = original[ni + 1];
@@ -730,7 +733,7 @@ function applyInkBleed(imageData, amount, roughness = 0.5) {
           if (!hasInkNeighbor && x > 0) {
             const ni = i + neighborOffsets[2];
             const neighborGray = original[ni] * GRAY_R + original[ni + 1] * GRAY_G + original[ni + 2] * GRAY_B;
-            if (neighborGray < paperThresholdScaled) {
+            if (neighborGray < paperThreshold) {
               hasInkNeighbor = true;
               inkR = original[ni];
               inkG = original[ni + 1];
@@ -742,7 +745,7 @@ function applyInkBleed(imageData, amount, roughness = 0.5) {
           if (!hasInkNeighbor && x < w - 1) {
             const ni = i + neighborOffsets[3];
             const neighborGray = original[ni] * GRAY_R + original[ni + 1] * GRAY_G + original[ni + 2] * GRAY_B;
-            if (neighborGray < paperThresholdScaled) {
+            if (neighborGray < paperThreshold) {
               hasInkNeighbor = true;
               inkR = original[ni];
               inkG = original[ni + 1];
@@ -1496,9 +1499,8 @@ export default function DomoDitherTool() {
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   
-  // Pre-blur and background
+  // Pre-blur
   const [preBlur, setPreBlur] = useState(DEFAULT_STATE.preBlur);
-  const [showBackground, setShowBackground] = useState(DEFAULT_STATE.showBackground);
   
   // Comparison slider
   const [showComparison, setShowComparison] = useState(false);
@@ -1581,7 +1583,6 @@ export default function DomoDitherTool() {
     setViewportSize(DEFAULT_STATE.viewportSize);
     setImageTransform(DEFAULT_STATE.imageTransform);
     setPreBlur(DEFAULT_STATE.preBlur);
-    setShowBackground(DEFAULT_STATE.showBackground);
     setLayers(DEFAULT_STATE.layers.map(l => ({ ...l, id: Date.now() })));
     showToast('Reset to defaults');
   };
@@ -1757,6 +1758,8 @@ export default function DomoDitherTool() {
       img.onload = () => {
         setImage(img);
         setImageTransform({ x: 0, y: 0, scale: 1 });
+        // Set viewport size to match image dimensions
+        setViewportSize({ w: img.width, h: img.height });
         showToast('Image loaded');
       };
       img.src = event.target.result;
@@ -1797,15 +1800,6 @@ export default function DomoDitherTool() {
   const resetView = () => {
     setImageTransform({ x: 0, y: 0, scale: 1 });
   };
-  
-  // Aspect ratio handlers
-  const setAspectRatio = (ratio) => {
-    if (ratio === '1:1') {
-      setViewportSize({ w: 1080, h: 1080 });
-    } else if (ratio === '9:16') {
-      setViewportSize({ w: 1080, h: 1920 });
-    }
-  };
 
   // Core image processing function (viewport architecture)
   const processImageCore = useCallback((sourceImage, targetCanvas, isExport = false) => {
@@ -1815,17 +1809,26 @@ export default function DomoDitherTool() {
     const sourceCanvas = document.createElement('canvas');
     const sourceCtx = sourceCanvas.getContext('2d');
     
-    // Use viewport size for export, or source image size for preview
-    const outputWidth = isExport ? viewportSize.w : sourceImage.width;
-    const outputHeight = isExport ? viewportSize.h : sourceImage.height;
+    // For preview, use sourceImage dimensions (previewImage is already limited to PREVIEW_MAX_WIDTH)
+    // For export, use full image dimensions
+    const outputWidth = sourceImage.width;
+    const outputHeight = sourceImage.height;
     
     targetCanvas.width = outputWidth;
     targetCanvas.height = outputHeight;
     
-    const scaledWidth = Math.round(sourceImage.width * debouncedImageScale);
-    const scaledHeight = Math.round(sourceImage.height * debouncedImageScale);
+    // For export, use full resolution; for preview, use scaled size
+    const scaledWidth = isExport ? sourceImage.width : Math.round(sourceImage.width * debouncedImageScale);
+    const scaledHeight = isExport ? sourceImage.height : Math.round(sourceImage.height * debouncedImageScale);
     sourceCanvas.width = scaledWidth;
     sourceCanvas.height = scaledHeight;
+    
+    // Calculate scale factor to make dither patterns consistent between preview and export
+    // The scale parameter in UI is relative to preview size
+    // For preview: use scale as-is (scaleFactor = 1)
+    // For export: scale up proportionally to match export dimensions
+    const previewWidth = image ? (image.width > PREVIEW_MAX_WIDTH ? PREVIEW_MAX_WIDTH : image.width) : sourceImage.width;
+    const scaleFactor = isExport ? (image ? image.width / previewWidth : 1) : 1;
     
     sourceCtx.fillStyle = '#888888';
     sourceCtx.fillRect(0, 0, scaledWidth, scaledHeight);
@@ -1859,13 +1862,15 @@ export default function DomoDitherTool() {
         
         if (algo) {
           let ditheredData;
-          if (algoInfo.hasScale && algoInfo.hasAngle) {
-            ditheredData = algo(sourceData, debouncedGradientDitherThreshold, debouncedGradientDitherScale, debouncedGradientDitherAngle);
-          } else if (algoInfo.hasScale) {
-            ditheredData = algo(sourceData, debouncedGradientDitherThreshold, debouncedGradientDitherScale);
-          } else {
-            ditheredData = algo(sourceData, debouncedGradientDitherThreshold);
-          }
+        // Scale the dither scale parameter to maintain consistent visual appearance
+        const scaledGradientDitherScale = debouncedGradientDitherScale * scaleFactor;
+        if (algoInfo.hasScale && algoInfo.hasAngle) {
+          ditheredData = algo(sourceData, debouncedGradientDitherThreshold, scaledGradientDitherScale, debouncedGradientDitherAngle);
+        } else if (algoInfo.hasScale) {
+          ditheredData = algo(sourceData, debouncedGradientDitherThreshold, scaledGradientDitherScale);
+        } else {
+          ditheredData = algo(sourceData, debouncedGradientDitherThreshold);
+        }
           
           const resultData = new Uint8ClampedArray(ditheredData.data);
           const ditheredDataArray = ditheredData.data;
@@ -1913,68 +1918,26 @@ export default function DomoDitherTool() {
         finalImageData = applyInkBleed(finalImageData, debouncedInkBleedAmount, debouncedInkBleedRoughness);
       }
       
-      // Fill background if showBackground is true
-      if (showBackground) {
-        ctx.fillStyle = backgroundColor;
-        ctx.fillRect(0, 0, outputWidth, outputHeight);
-      } else {
-        ctx.clearRect(0, 0, outputWidth, outputHeight);
-      }
+      // Always fill background (image functions as background)
+      ctx.fillStyle = backgroundColor;
+      ctx.fillRect(0, 0, outputWidth, outputHeight);
       
-      // Calculate viewport crop based on imageTransform
-      const transform = isExport ? imageTransform : { x: 0, y: 0, scale: 1 };
-      const cropX = Math.max(0, Math.floor(-transform.x / transform.scale));
-      const cropY = Math.max(0, Math.floor(-transform.y / transform.scale));
-      const cropWidth = Math.min(scaledWidth - cropX, Math.floor(outputWidth / transform.scale));
-      const cropHeight = Math.min(scaledHeight - cropY, Math.floor(outputHeight / transform.scale));
-      
-      const offsetX = (scaledWidth - sourceImage.width) / 2;
-      const offsetY = (scaledHeight - sourceImage.height) / 2;
-      
-      const baseImageData = ctx.getImageData(0, 0, outputWidth, outputHeight);
-      
-      for (let y = 0; y < outputHeight; y++) {
-        for (let x = 0; x < outputWidth; x++) {
-          const sx = Math.floor(cropX + x / transform.scale + offsetX);
-          const sy = Math.floor(cropY + y / transform.scale + offsetY);
-          
-          if (sx >= 0 && sx < scaledWidth && sy >= 0 && sy < scaledHeight) {
-            const si = (sy * scaledWidth + sx) * 4;
-            const di = (y * outputWidth + x) * 4;
-            
-            baseImageData.data[di] = finalImageData.data[si];
-            baseImageData.data[di + 1] = finalImageData.data[si + 1];
-            baseImageData.data[di + 2] = finalImageData.data[si + 2];
-            baseImageData.data[di + 3] = 255;
-          }
-        }
-      }
-      
-      ctx.putImageData(baseImageData, 0, 0);
+      // For both preview and export, direct 1:1 pixel copy
+      // Preview uses previewImage (already limited to PREVIEW_MAX_WIDTH) so it matches visually
+      ctx.putImageData(finalImageData, 0, 0);
     } else {
       // Layer mode
-      // Fill background if showBackground is true
-      if (showBackground) {
-        ctx.fillStyle = backgroundColor;
-        ctx.fillRect(0, 0, outputWidth, outputHeight);
-      } else {
-        ctx.clearRect(0, 0, outputWidth, outputHeight);
-      }
+      // Always fill background (image functions as background)
+      ctx.fillStyle = backgroundColor;
+      ctx.fillRect(0, 0, outputWidth, outputHeight);
       const baseImageData = ctx.getImageData(0, 0, outputWidth, outputHeight);
       const baseData = baseImageData.data;
       
-      // Calculate viewport crop based on imageTransform
-      const transform = isExport ? imageTransform : { x: 0, y: 0, scale: 1 };
-      const cropX = Math.max(0, Math.floor(-transform.x / transform.scale));
-      const cropY = Math.max(0, Math.floor(-transform.y / transform.scale));
-      
-      const offsetX = (scaledWidth - sourceImage.width) * 0.5;
-      const offsetY = (scaledHeight - sourceImage.height) * 0.5;
-      const targetW = outputWidth;
-      const targetH = outputHeight;
       const inv255 = 1 / 255;
       const minDarkness = 0.02;
       
+      // For both preview and export, use direct 1:1 pixel mapping
+      // Preview uses previewImage (already limited to PREVIEW_MAX_WIDTH) so it matches visually
       debouncedLayers.forEach(layer => {
         // Skip hidden layers
         if (layer.visible === false) return;
@@ -1984,11 +1947,13 @@ export default function DomoDitherTool() {
         
         if (!algo) return;
         
+        // Scale the dither scale parameter to maintain consistent visual appearance
+        const scaledLayerScale = layer.scale * scaleFactor;
         let ditheredData;
         if (algoInfo.hasScale && algoInfo.hasAngle) {
-          ditheredData = algo(sourceData, layer.threshold, layer.scale, layer.angle);
+          ditheredData = algo(sourceData, layer.threshold, scaledLayerScale, layer.angle);
         } else if (algoInfo.hasScale) {
-          ditheredData = algo(sourceData, layer.threshold, layer.scale);
+          ditheredData = algo(sourceData, layer.threshold, scaledLayerScale);
         } else {
           ditheredData = algo(sourceData, layer.threshold);
         }
@@ -2005,16 +1970,20 @@ export default function DomoDitherTool() {
         const layerOffsetY = layer.offsetY;
         const ditheredDataArray = ditheredData.data;
         
-        // Optimized loop with pre-calculated values (viewport-aware)
-        for (let y = 0; y < targetH; y++) {
-          const sy = Math.floor(cropY + y / transform.scale + offsetY - layerOffsetY);
+        // Direct 1:1 mapping for both preview and export
+        // Map from output coordinates to scaled coordinates when imageScale !== 1
+        const scaleX = scaledWidth / outputWidth;
+        const scaleY = scaledHeight / outputHeight;
+        
+        for (let y = 0; y < outputHeight; y++) {
+          const sy = Math.round((y - layerOffsetY) * scaleY);
           if (sy < 0 || sy >= scaledHeight) continue;
           
           const syw = sy * scaledWidth;
-          const yw = y * targetW;
+          const yw = y * outputWidth;
           
-          for (let x = 0; x < targetW; x++) {
-            const sx = Math.floor(cropX + x / transform.scale + offsetX - layerOffsetX);
+          for (let x = 0; x < outputWidth; x++) {
+            const sx = Math.round((x - layerOffsetX) * scaleX);
             if (sx < 0 || sx >= scaledWidth) continue;
             
             const si = (syw + sx) * 4;
@@ -2034,7 +2003,7 @@ export default function DomoDitherTool() {
       
       ctx.putImageData(baseImageData, 0, 0);
     }
-  }, [debouncedImageScale, debouncedBrightness, debouncedContrast, invert, preBlur, gradientEnabled, gradientColors, gradientDitherType, debouncedGradientDitherThreshold, debouncedGradientDitherScale, debouncedGradientDitherAngle, debouncedLayers, backgroundColor, showBackground, viewportSize, imageTransform, inkBleed, debouncedInkBleedAmount, debouncedInkBleedRoughness]);
+  }, [debouncedImageScale, debouncedBrightness, debouncedContrast, invert, preBlur, gradientEnabled, gradientColors, gradientDitherType, debouncedGradientDitherThreshold, debouncedGradientDitherScale, debouncedGradientDitherAngle, debouncedLayers, backgroundColor, viewportSize, imageTransform, inkBleed, debouncedInkBleedAmount, debouncedInkBleedRoughness, image]);
 
   // Process preview image (debounced and optimized)
   useEffect(() => {
@@ -2111,77 +2080,119 @@ export default function DomoDitherTool() {
   };
 
   const exportSVG = () => {
-    if (!image) return;
-    
-    // Create a temporary canvas to get the processed image data
-    const tempCanvas = document.createElement('canvas');
-    processImageCore(image, tempCanvas, true);
-    const ctx = tempCanvas.getContext('2d');
-    const imageData = ctx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
-    
-    const svgWidth = viewportSize.w;
-    const svgHeight = viewportSize.h;
-    
-    let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}">\n`;
-    
-    // Background if showBackground is true
-    if (showBackground) {
-      svg += `  <rect width="${svgWidth}" height="${svgHeight}" fill="${backgroundColor}"/>\n`;
+    console.log('exportSVG called', { image: !!image });
+    if (!image) {
+      showToast('No image loaded');
+      return;
     }
     
-    // Process each layer
-    if (!gradientEnabled && debouncedLayers.length > 0) {
-      debouncedLayers.forEach((layer, layerIdx) => {
-        if (layer.visible === false) return;
+    try {
+      console.log('Starting SVG export...');
+      // Create a temporary canvas to get the processed image data for reference
+      const tempCanvas = document.createElement('canvas');
+      processImageCore(image, tempCanvas, true);
+      const ctx = tempCanvas.getContext('2d');
+      
+      // Get the original source image data (before dithering) for sampling darkness values
+      const sourceCanvas = document.createElement('canvas');
+      sourceCanvas.width = image.width;
+      sourceCanvas.height = image.height;
+      const sourceCtx = sourceCanvas.getContext('2d');
+      sourceCtx.drawImage(image, 0, 0);
+      const sourceImageData = sourceCtx.getImageData(0, 0, image.width, image.height);
+      
+      console.log('Image processed', { width: tempCanvas.width, height: tempCanvas.height });
+      
+      // Use actual processed image dimensions (limit to reasonable size for SVG)
+      const maxSVGSize = 2000; // Limit SVG size to prevent huge files
+      const maxDim = Math.max(tempCanvas.width, tempCanvas.height);
+      const scale = maxDim > 0 ? Math.min(1, maxSVGSize / maxDim) : 1;
+      const svgWidth = Math.max(1, Math.round(tempCanvas.width * scale));
+      const svgHeight = Math.max(1, Math.round(tempCanvas.height * scale));
+      
+      // Calculate scale factor for dither patterns (same as processImageCore)
+      const previewWidth = image ? (image.width > PREVIEW_MAX_WIDTH ? PREVIEW_MAX_WIDTH : image.width) : tempCanvas.width;
+      const ditherScaleFactor = image ? image.width / previewWidth : 1;
+      
+      let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}">\n`;
+      
+      // Always include background (image functions as background)
+      svg += `  <rect width="${svgWidth}" height="${svgHeight}" fill="${backgroundColor}"/>\n`;
+      
+      // Process gradient mode or layer mode
+      if (gradientEnabled && gradientColors.length >= 2) {
+        // Gradient mode: create a single group with gradient colors
+        const colors = gradientColors.map(key => DOMO_PALETTE[key]?.hex || '#000000');
+        svg += `  <defs>\n`;
+        svg += `    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">\n`;
+        gradientColors.forEach((colorKey, i) => {
+          const color = DOMO_PALETTE[colorKey];
+          const offset = (i / (gradientColors.length - 1)) * 100;
+          svg += `      <stop offset="${offset}%" stop-color="${color?.hex || '#000000'}"/>\n`;
+        });
+        svg += `    </linearGradient>\n`;
+        svg += `  </defs>\n`;
+        svg += `  <g id="Gradient" fill="url(#gradient)">\n`;
         
-        const color = DOMO_PALETTE[layer.colorKey];
-        if (!color) return;
-        
-        svg += `  <g id="${color.name}" fill="${color.hex}">\n`;
-        
-        const algoInfo = DITHER_ALGORITHMS[layer.ditherType];
-        
-        // For halftone patterns, generate circles
-        if (algoInfo?.category === 'halftone' && layer.ditherType === 'halftoneCircle') {
-          const step = Math.max(3, Math.floor(layer.scale));
+        // Generate pattern based on gradient dither type
+        const algoInfo = DITHER_ALGORITHMS[gradientDitherType];
+        if (algoInfo?.category === 'halftone' && gradientDitherType === 'halftoneCircle') {
+          // Scale the dither scale to match export dimensions
+          const scaledGradientDitherScale = debouncedGradientDitherScale * ditherScaleFactor;
+          const step = Math.max(3, Math.floor(scaledGradientDitherScale));
           const maxRadius = step * 0.48;
-          const rad = (layer.angle * Math.PI) / 180;
+          const rad = (debouncedGradientDitherAngle * Math.PI) / 180;
           const cos = Math.cos(rad);
           const sin = Math.sin(rad);
+          const radiusMultiplier = maxRadius * (0.6 + debouncedGradientDitherThreshold * 0.7);
+          const wHalf = svgWidth * 0.5;
+          const hHalf = svgHeight * 0.5;
           
-          // Sample points and generate circles
-          for (let gy = 0; gy < svgHeight + step; gy += step) {
-            for (let gx = 0; gx < svgWidth + step; gx += step) {
-              const cx = gx * cos - gy * sin + svgWidth * 0.5;
-              const cy = gx * sin + gy * cos + svgHeight * 0.5;
+          // Match the algorithm's grid bounds calculation
+          const gridExtent = Math.max(svgWidth, svgHeight) * 2;
+          const gridStart = -gridExtent;
+          const gridEnd = gridExtent;
+          const minGridX = Math.floor((gridStart - wHalf) / step) * step;
+          const maxGridX = Math.ceil((gridEnd - wHalf) / step) * step;
+          const minGridY = Math.floor((gridStart - hHalf) / step) * step;
+          const maxGridY = Math.ceil((gridEnd - hHalf) / step) * step;
+          
+          for (let gy = minGridY; gy <= maxGridY; gy += step) {
+            for (let gx = minGridX; gx <= maxGridX; gx += step) {
+              const cx = gx * cos - gy * sin + wHalf;
+              const cy = gx * sin + gy * cos + hHalf;
               
-              if (cx < -step || cx > svgWidth + step || cy < -step || cy > svgHeight + step) continue;
+              if (cx < -step || cx >= svgWidth + step || cy < -step || cy >= svgHeight + step) continue;
               
-              const px = Math.max(0, Math.min(svgWidth - 1, Math.round(cx)));
-              const py = Math.max(0, Math.min(svgHeight - 1, Math.round(cy)));
-              const idx = (py * svgWidth + px) * 4;
+              // Sample from original source image to get actual darkness values
+              const sourceX = Math.max(0, Math.min(image.width - 1, Math.round(cx / scale * (image.width / tempCanvas.width))));
+              const sourceY = Math.max(0, Math.min(image.height - 1, Math.round(cy / scale * (image.height / tempCanvas.height))));
+              const sourceIdx = (sourceY * image.width + sourceX) * 4;
               
-              if (idx < imageData.data.length) {
-                const gray = (imageData.data[idx] + imageData.data[idx + 1] + imageData.data[idx + 2]) / 3 / 255;
+              if (sourceIdx + 2 < sourceImageData.data.length) {
+                const gray = getGray(sourceImageData.data, sourceIdx);
                 const darkness = 1 - gray;
-                const radius = Math.sqrt(darkness) * maxRadius * (0.6 + layer.threshold * 0.7);
+                const radius = Math.sqrt(darkness) * radiusMultiplier;
                 
-                if (radius > 0.5) {
-                  svg += `    <circle cx="${cx}" cy="${cy}" r="${radius}" opacity="${layer.opacity}"/>\n`;
+                if (radius >= 0.5) {
+                  svg += `    <circle cx="${cx}" cy="${cy}" r="${radius * scale}"/>\n`;
                 }
               }
             }
           }
         } else {
-          // For other patterns, use rects (simplified - could be optimized further)
-          const pixelSize = 1;
+          // For other gradient patterns, limit to reasonable resolution
+          const pixelSize = Math.max(2, Math.ceil(Math.max(svgWidth, svgHeight) / 500)); // Limit to ~500 elements per dimension
           for (let y = 0; y < svgHeight; y += pixelSize) {
             for (let x = 0; x < svgWidth; x += pixelSize) {
-              const idx = (y * svgWidth + x) * 4;
-              if (idx < imageData.data.length) {
-                const gray = (imageData.data[idx] + imageData.data[idx + 1] + imageData.data[idx + 2]) / 3;
-                if (gray < 200) { // Threshold for dark pixels
-                  svg += `    <rect x="${x}" y="${y}" width="${pixelSize}" height="${pixelSize}" opacity="${layer.opacity}"/>\n`;
+              // Sample from original source image
+              const srcX = Math.round(x / scale * (image.width / tempCanvas.width));
+              const srcY = Math.round(y / scale * (image.height / tempCanvas.height));
+              const idx = (srcY * image.width + srcX) * 4;
+              if (idx + 2 < sourceImageData.data.length) {
+                const gray = (sourceImageData.data[idx] + sourceImageData.data[idx + 1] + sourceImageData.data[idx + 2]) / 3;
+                if (gray < 200) {
+                  svg += `    <rect x="${x}" y="${y}" width="${pixelSize}" height="${pixelSize}"/>\n`;
                 }
               }
             }
@@ -2189,23 +2200,130 @@ export default function DomoDitherTool() {
         }
         
         svg += `  </g>\n`;
-      });
+      } else if (debouncedLayers.length > 0) {
+        // Layer mode - apply blend modes to match canvas rendering
+        const blendModeMap = {
+          'normal': 'normal',
+          'multiply': 'multiply',
+          'screen': 'screen',
+          'overlay': 'overlay',
+          'darken': 'darken',
+          'lighten': 'lighten'
+        };
+        
+        debouncedLayers.forEach((layer, layerIdx) => {
+          if (layer.visible === false) return;
+          
+          const color = DOMO_PALETTE[layer.colorKey];
+          if (!color) return;
+          
+          const svgBlendMode = blendModeMap[layer.blendMode] || 'multiply';
+          svg += `  <g id="${color.name}" fill="${color.hex}" opacity="${layer.opacity}" style="mix-blend-mode: ${svgBlendMode};">\n`;
+          
+          const algoInfo = DITHER_ALGORITHMS[layer.ditherType];
+          
+          // For halftone patterns, generate circles
+          if (algoInfo?.category === 'halftone' && layer.ditherType === 'halftoneCircle') {
+          // Scale the dither scale to match export dimensions
+          const scaledLayerScale = layer.scale * ditherScaleFactor;
+          const step = Math.max(3, Math.floor(scaledLayerScale));
+          const maxRadius = step * 0.48;
+          const rad = (layer.angle * Math.PI) / 180;
+          const cos = Math.cos(rad);
+          const sin = Math.sin(rad);
+          const radiusMultiplier = maxRadius * (0.6 + layer.threshold * 0.7);
+          const wHalf = svgWidth * 0.5;
+          const hHalf = svgHeight * 0.5;
+          
+          // Match the algorithm's grid bounds calculation (same as halftoneCircle function)
+          const gridExtent = Math.max(svgWidth, svgHeight) * 2;
+          const gridStart = -gridExtent;
+          const gridEnd = gridExtent;
+          const minGridX = Math.floor((gridStart - wHalf) / step) * step;
+          const maxGridX = Math.ceil((gridEnd - wHalf) / step) * step;
+          const minGridY = Math.floor((gridStart - hHalf) / step) * step;
+          const maxGridY = Math.ceil((gridEnd - hHalf) / step) * step;
+          
+          for (let gy = minGridY; gy <= maxGridY; gy += step) {
+            for (let gx = minGridX; gx <= maxGridX; gx += step) {
+              // Apply layer offsets to match canvas rendering
+              const offsetGx = gx - (layer.offsetX * ditherScaleFactor);
+              const offsetGy = gy - (layer.offsetY * ditherScaleFactor);
+              const cx = offsetGx * cos - offsetGy * sin + wHalf;
+              const cy = offsetGx * sin + offsetGy * cos + hHalf;
+              
+              if (cx < -step || cx >= svgWidth + step || cy < -step || cy >= svgHeight + step) continue;
+              
+              // Sample from original source image to get actual darkness values
+              const sourceX = Math.max(0, Math.min(image.width - 1, Math.round(cx / scale * (image.width / tempCanvas.width))));
+              const sourceY = Math.max(0, Math.min(image.height - 1, Math.round(cy / scale * (image.height / tempCanvas.height))));
+              const sourceIdx = (sourceY * image.width + sourceX) * 4;
+              
+              if (sourceIdx + 2 < sourceImageData.data.length) {
+                const gray = getGray(sourceImageData.data, sourceIdx);
+                const darkness = 1 - gray;
+                const radius = Math.sqrt(darkness) * radiusMultiplier;
+                
+                if (radius >= 0.5) {
+                  // Use darkness-based opacity to match canvas rendering (darkness already accounts for layer opacity via blend mode)
+                  svg += `    <circle cx="${cx}" cy="${cy}" r="${radius * scale}"/>\n`;
+                }
+              }
+            }
+          }
+        } else {
+          // For other patterns, limit to reasonable resolution
+          const pixelSize = Math.max(2, Math.ceil(Math.max(svgWidth, svgHeight) / 500)); // Limit to ~500 elements per dimension
+          for (let y = 0; y < svgHeight; y += pixelSize) {
+            for (let x = 0; x < svgWidth; x += pixelSize) {
+              // Apply layer offsets to match canvas rendering
+              const offsetX = x - (layer.offsetX * ditherScaleFactor * scale);
+              const offsetY = y - (layer.offsetY * ditherScaleFactor * scale);
+              // Sample from original source image
+              const srcX = Math.round(offsetX / scale * (image.width / tempCanvas.width));
+              const srcY = Math.round(offsetY / scale * (image.height / tempCanvas.height));
+              const idx = (srcY * image.width + srcX) * 4;
+              if (idx + 2 < sourceImageData.data.length && srcX >= 0 && srcX < image.width && srcY >= 0 && srcY < image.height) {
+                const gray = (sourceImageData.data[idx] + sourceImageData.data[idx + 1] + sourceImageData.data[idx + 2]) / 3;
+                if (gray < 200) { // Threshold for dark pixels
+                  // Use darkness-based opacity to match canvas rendering
+                  const darkness = 1 - (gray / 255);
+                  const rectOpacity = Math.max(0.1, darkness);
+                  svg += `    <rect x="${x}" y="${y}" width="${pixelSize}" height="${pixelSize}" opacity="${rectOpacity}"/>\n`;
+                }
+              }
+            }
+          }
+          }
+          
+          svg += `  </g>\n`;
+        });
+      } else {
+        // No gradient or layers - just export background
+        console.log('No gradient or layers enabled, exporting background only');
+      }
+      
+      svg += `</svg>`;
+      
+      console.log('SVG generated', { length: svg.length, svgWidth, svgHeight });
+      
+      // Download SVG
+      const blob = new Blob([svg], { type: 'image/svg+xml' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'domo-dither.svg';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      console.log('SVG download triggered');
+      showToast('Exported SVG');
+    } catch (error) {
+      console.error('SVG export error:', error);
+      showToast('SVG export failed: ' + error.message);
     }
-    
-    svg += `</svg>`;
-    
-    // Download SVG
-    const blob = new Blob([svg], { type: 'image/svg+xml' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'domo-dither.svg';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    
-    showToast('Exported SVG');
   };
 
   const gradientAlgoInfo = useMemo(() => DITHER_ALGORITHMS[gradientDitherType], [gradientDitherType]);
@@ -2234,10 +2352,6 @@ export default function DomoDitherTool() {
               <>
                 <Slider label={`SCALE ${Math.round(imageScale * 100)}%`} value={imageScale} min={0.5} max={2} step={0.05} onChange={setImageScale} />
                 <Slider label={`PRE-BLUR ${Math.round(preBlur)}px`} value={preBlur} min={0} max={20} step={0.5} onChange={setPreBlur} />
-                <div style={{ display: 'flex', gap: '4px', marginBottom: '12px' }}>
-                  <Button onClick={() => setAspectRatio('1:1')} active={viewportSize.w === viewportSize.h} style={{ flex: 1, fontSize: '9px' }}>1:1</Button>
-                  <Button onClick={() => setAspectRatio('9:16')} active={viewportSize.w === 1080 && viewportSize.h === 1920} style={{ flex: 1, fontSize: '9px' }}>9:16</Button>
-                </div>
                 <Button onClick={randomizeLayers}>↻ RANDOMIZE</Button>
               </>
             )}
@@ -2436,12 +2550,6 @@ export default function DomoDitherTool() {
               ))}
             </div>
             
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', alignItems: 'center' }}>
-              <label style={{ color: '#666', fontSize: '10px', fontFamily: 'monospace' }}>SHOW BACKGROUND</label>
-              <Button onClick={() => setShowBackground(!showBackground)} active={showBackground} style={{ flex: 1 }}>
-                {showBackground ? 'ON' : 'OFF'}
-              </Button>
-            </div>
             {image && (
               <>
                 <Button primary onClick={exportPNG} style={{ marginBottom: '8px' }}>EXPORT PNG</Button>
@@ -2550,11 +2658,10 @@ export default function DomoDitherTool() {
             </div>
           ) : (
             <div style={{
-              width: `${viewportSize.w}px`,
-              height: `${viewportSize.h}px`,
+              width: previewImage ? `${previewImage.width}px` : `${viewportSize.w}px`,
+              height: previewImage ? `${previewImage.height}px` : `${viewportSize.h}px`,
               position: 'relative',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
-              border: '1px solid #333'
+              backgroundColor: '#111'
             }}>
               <div style={{
                 transform: `translate(${imageTransform.x}px, ${imageTransform.y}px) scale(${imageTransform.scale})`,
@@ -2571,7 +2678,6 @@ export default function DomoDitherTool() {
                   position: 'absolute',
                   top: 0,
                   left: 0,
-                  border: '1px solid #333',
                   imageRendering: imageTransform.scale > 1 ? 'pixelated' : 'auto',
                   clipPath: showComparison ? `inset(0 ${(1 - comparisonPosition) * 100}% 0 0)` : 'none',
                   display: showComparison ? 'block' : 'none'
@@ -2582,7 +2688,9 @@ export default function DomoDitherTool() {
               <canvas 
                 ref={canvasRef} 
                 style={{ 
-                  border: '1px solid #333',
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
                   imageRendering: imageTransform.scale > 1 ? 'pixelated' : 'auto',
                   clipPath: showComparison ? `inset(0 0 0 ${comparisonPosition * 100}%)` : 'none'
                 }} 
