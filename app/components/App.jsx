@@ -503,7 +503,8 @@ export default function HalftoneLab() {
   };
 
   // Core image processing function (viewport architecture)
-  const processImageCore = useCallback((sourceImage, targetCanvas, isExport = false) => {
+  // exportScale: additional multiplier for export resolution (1x, 2x, 4x) - used to scale analog effects proportionally
+  const processImageCore = useCallback((sourceImage, targetCanvas, isExport = false, exportScale = 1) => {
     if (!sourceImage || !targetCanvas) return;
     
     const ctx = targetCanvas.getContext('2d');
@@ -511,25 +512,25 @@ export default function HalftoneLab() {
     const sourceCtx = sourceCanvas.getContext('2d');
     
     // For preview, use sourceImage dimensions (previewImage is already limited to PREVIEW_MAX_WIDTH)
-    // For export, use full image dimensions
-    const outputWidth = sourceImage.width;
-    const outputHeight = sourceImage.height;
+    // For export, use full image dimensions multiplied by export scale
+    const outputWidth = Math.round(sourceImage.width * exportScale);
+    const outputHeight = Math.round(sourceImage.height * exportScale);
     
     targetCanvas.width = outputWidth;
     targetCanvas.height = outputHeight;
     
-    // For export, use full resolution; for preview, use scaled size
-    const scaledWidth = isExport ? sourceImage.width : Math.round(sourceImage.width * debouncedImageScale);
-    const scaledHeight = isExport ? sourceImage.height : Math.round(sourceImage.height * debouncedImageScale);
+    // For export, use full resolution * export scale; for preview, use scaled size
+    const scaledWidth = isExport ? outputWidth : Math.round(sourceImage.width * debouncedImageScale);
+    const scaledHeight = isExport ? outputHeight : Math.round(sourceImage.height * debouncedImageScale);
     sourceCanvas.width = scaledWidth;
     sourceCanvas.height = scaledHeight;
     
     // Calculate scale factor to make dither patterns consistent between preview and export
     // The scale parameter in UI is relative to preview size
     // For preview: use scale as-is (scaleFactor = 1)
-    // For export: scale up proportionally to match export dimensions
+    // For export: scale up proportionally to match export dimensions, including export resolution multiplier
     const previewWidth = image ? (image.width > PREVIEW_MAX_WIDTH ? PREVIEW_MAX_WIDTH : image.width) : sourceImage.width;
-    const scaleFactor = isExport ? (image ? image.width / previewWidth : 1) : 1;
+    const scaleFactor = isExport ? (image ? (image.width / previewWidth) * exportScale : exportScale) : 1;
     
     sourceCtx.fillStyle = '#888888';
     sourceCtx.fillRect(0, 0, scaledWidth, scaledHeight);
@@ -701,25 +702,15 @@ export default function HalftoneLab() {
   const exportPNG = () => {
     if (!image) return;
     
-    // Create export canvas at full resolution
-    const exportCanvas = document.createElement('canvas');
-    processImageCore(image, exportCanvas, true);
-    
     const scale = EXPORT_RESOLUTIONS[exportResolution].scale;
     
-    let dataUrl;
+    // Create export canvas at full resolution * export scale
+    // Pass exportScale to processImageCore so analog effects (ink bleed, etc.) scale proportionally
+    const exportCanvas = document.createElement('canvas');
+    processImageCore(image, exportCanvas, true, scale);
     
-    if (scale === 1) {
-      dataUrl = exportCanvas.toDataURL('image/png');
-    } else {
-      const scaledCanvas = document.createElement('canvas');
-      scaledCanvas.width = exportCanvas.width * scale;
-      scaledCanvas.height = exportCanvas.height * scale;
-      const ctx = scaledCanvas.getContext('2d');
-      ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(exportCanvas, 0, 0, scaledCanvas.width, scaledCanvas.height);
-      dataUrl = scaledCanvas.toDataURL('image/png');
-    }
+    // Canvas is already at the correct resolution, no post-processing upscale needed
+    const dataUrl = exportCanvas.toDataURL('image/png');
     
     const byteString = atob(dataUrl.split(',')[1]);
     const mimeString = dataUrl.split(',')[0].split(':')[1].split(';')[0];

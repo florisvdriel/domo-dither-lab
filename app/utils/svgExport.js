@@ -71,6 +71,10 @@ function generateHalftoneCircles(layer, sourceImageData, dimensions, scaleFactor
   const wHalf = width * 0.5;
   const hHalf = height * 0.5;
   
+  // Layer offsets (scaled)
+  const offsetX = layer.offsetX * scaleFactor;
+  const offsetY = layer.offsetY * scaleFactor;
+  
   // Calculate tight grid bounds
   const diagonal = Math.sqrt(width * width + height * height);
   const gridExtent = diagonal * 0.6;
@@ -82,18 +86,21 @@ function generateHalftoneCircles(layer, sourceImageData, dimensions, scaleFactor
   
   for (let gy = minGrid; gy <= maxGrid; gy += step) {
     for (let gx = minGrid; gx <= maxGrid; gx += step) {
-      // Apply layer offsets
-      const offsetGx = gx - (layer.offsetX * scaleFactor);
-      const offsetGy = gy - (layer.offsetY * scaleFactor);
-      const cx = offsetGx * cos - offsetGy * sin + wHalf;
-      const cy = offsetGx * sin + offsetGy * cos + hHalf;
+      // Calculate element position (where the circle will be drawn)
+      const cx = gx * cos - gy * sin + wHalf;
+      const cy = gx * sin + gy * cos + hHalf;
       
-      // Bounds check
+      // Bounds check for element position
       if (cx < -step || cx >= width + step || cy < -step || cy >= height + step) continue;
       
-      // Sample from source image
-      const srcX = Math.max(0, Math.min(srcWidth - 1, Math.round(cx * srcWidth / width)));
-      const srcY = Math.max(0, Math.min(srcHeight - 1, Math.round(cy * srcHeight / height)));
+      // Calculate sample position (where to read from source image)
+      // Apply offset here - this shifts what part of the image is sampled for this grid position
+      const sampleX = cx - offsetX;
+      const sampleY = cy - offsetY;
+      
+      // Sample from source image at offset position
+      const srcX = Math.max(0, Math.min(srcWidth - 1, Math.round(sampleX * srcWidth / width)));
+      const srcY = Math.max(0, Math.min(srcHeight - 1, Math.round(sampleY * srcHeight / height)));
       const idx = (srcY * srcWidth + srcX) * 4;
       
       if (idx + 2 < data.length) {
@@ -134,6 +141,10 @@ function generateHalftoneSquares(layer, sourceImageData, dimensions, scaleFactor
   const wHalf = width * 0.5;
   const hHalf = height * 0.5;
   
+  // Layer offsets (scaled)
+  const offsetX = layer.offsetX * scaleFactor;
+  const offsetY = layer.offsetY * scaleFactor;
+  
   const diagonal = Math.sqrt(width * width + height * height);
   const gridExtent = diagonal * 0.6;
   const minGrid = -gridExtent;
@@ -143,15 +154,21 @@ function generateHalftoneSquares(layer, sourceImageData, dimensions, scaleFactor
   
   for (let gy = minGrid; gy <= maxGrid; gy += step) {
     for (let gx = minGrid; gx <= maxGrid; gx += step) {
-      const offsetGx = gx - (layer.offsetX * scaleFactor);
-      const offsetGy = gy - (layer.offsetY * scaleFactor);
-      const cx = offsetGx * cos - offsetGy * sin + wHalf;
-      const cy = offsetGx * sin + offsetGy * cos + hHalf;
+      // Calculate element position (where the square will be drawn)
+      const cx = gx * cos - gy * sin + wHalf;
+      const cy = gx * sin + gy * cos + hHalf;
       
+      // Bounds check for element position
       if (cx < -step || cx >= width + step || cy < -step || cy >= height + step) continue;
       
-      const srcX = Math.max(0, Math.min(srcWidth - 1, Math.round(cx * srcWidth / width)));
-      const srcY = Math.max(0, Math.min(srcHeight - 1, Math.round(cy * srcHeight / height)));
+      // Calculate sample position (where to read from source image)
+      // Apply offset here - this shifts what part of the image is sampled for this grid position
+      const sampleX = cx - offsetX;
+      const sampleY = cy - offsetY;
+      
+      // Sample from source image at offset position
+      const srcX = Math.max(0, Math.min(srcWidth - 1, Math.round(sampleX * srcWidth / width)));
+      const srcY = Math.max(0, Math.min(srcHeight - 1, Math.round(sampleY * srcHeight / height)));
       const idx = (srcY * srcWidth + srcX) * 4;
       
       if (idx + 2 < data.length) {
@@ -190,6 +207,10 @@ function generateHalftoneLines(layer, sourceImageData, dimensions, scaleFactor) 
   const sin = Math.sin(rad);
   const maxWidth = spacing * 0.7 * (0.5 + layer.threshold * 0.7);
   
+  // Layer offsets (scaled)
+  const offsetX = layer.offsetX * scaleFactor;
+  const offsetY = layer.offsetY * scaleFactor;
+  
   // Generate line segments with varying stroke widths
   const diagonal = Math.sqrt(width * width + height * height);
   const numLines = Math.ceil(diagonal / spacing) * 2;
@@ -197,7 +218,7 @@ function generateHalftoneLines(layer, sourceImageData, dimensions, scaleFactor) 
   let svg = '';
   
   for (let i = -numLines; i <= numLines; i++) {
-    const lineOffset = i * spacing - (layer.offsetX * scaleFactor);
+    const lineOffset = i * spacing;
     
     // Line endpoints (extend beyond canvas)
     const x1 = lineOffset * cos + diagonal * sin;
@@ -205,12 +226,18 @@ function generateHalftoneLines(layer, sourceImageData, dimensions, scaleFactor) 
     const x2 = lineOffset * cos - diagonal * sin;
     const y2 = lineOffset * sin + diagonal * cos;
     
-    // Sample along the line to determine stroke width
+    // Calculate line center position (where the line will be drawn)
     const midX = (x1 + x2) / 2 + width / 2;
     const midY = (y1 + y2) / 2 + height / 2;
     
-    const srcX = Math.max(0, Math.min(srcWidth - 1, Math.round(midX * srcWidth / width)));
-    const srcY = Math.max(0, Math.min(srcHeight - 1, Math.round(midY * srcHeight / height)));
+    // Calculate sample position (where to read from source image)
+    // Apply offset here - this shifts what part of the image is sampled for this line
+    const sampleX = midX - offsetX;
+    const sampleY = midY - offsetY;
+    
+    // Sample from source image at offset position
+    const srcX = Math.max(0, Math.min(srcWidth - 1, Math.round(sampleX * srcWidth / width)));
+    const srcY = Math.max(0, Math.min(srcHeight - 1, Math.round(sampleY * srcHeight / height)));
     const idx = (srcY * srcWidth + srcX) * 4;
     
     if (idx + 2 < data.length) {
@@ -239,6 +266,10 @@ function generateBayerPattern(layer, sourceImageData, dimensions, scaleFactor) {
   const pixelSize = Math.max(2, Math.floor(layer.scale * scaleFactor));
   const threshold = layer.threshold;
   
+  // Layer offsets (scaled)
+  const offsetX = layer.offsetX * scaleFactor;
+  const offsetY = layer.offsetY * scaleFactor;
+  
   // Get appropriate Bayer matrix size
   let matrixSize = 4;
   if (layer.ditherType === 'bayer2x2') matrixSize = 2;
@@ -251,11 +282,18 @@ function generateBayerPattern(layer, sourceImageData, dimensions, scaleFactor) {
   
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
+      // Calculate element position (where the pixel will be drawn)
       const x = col * pixelSize + pixelSize / 2;
       const y = row * pixelSize + pixelSize / 2;
       
-      const srcX = Math.max(0, Math.min(srcWidth - 1, Math.round(x * srcWidth / width)));
-      const srcY = Math.max(0, Math.min(srcHeight - 1, Math.round(y * srcHeight / height)));
+      // Calculate sample position (where to read from source image)
+      // Apply offset here - this shifts what part of the image is sampled for this cell
+      const sampleX = x - offsetX;
+      const sampleY = y - offsetY;
+      
+      // Sample from source image at offset position
+      const srcX = Math.max(0, Math.min(srcWidth - 1, Math.round(sampleX * srcWidth / width)));
+      const srcY = Math.max(0, Math.min(srcHeight - 1, Math.round(sampleY * srcHeight / height)));
       const idx = (srcY * srcWidth + srcX) * 4;
       
       if (idx + 2 < data.length) {
@@ -328,6 +366,10 @@ function generateErrorDiffusionPaths(layer, sourceImageData, dimensions, scaleFa
   const pixelSize = Math.max(2, Math.floor(layer.scale * scaleFactor));
   const threshold = 80 + layer.threshold * 100;
   
+  // Layer offsets (scaled)
+  const offsetX = layer.offsetX * scaleFactor;
+  const offsetY = layer.offsetY * scaleFactor;
+  
   const cols = Math.ceil(width / pixelSize);
   const rows = Math.ceil(height / pixelSize);
   
@@ -336,11 +378,18 @@ function generateErrorDiffusionPaths(layer, sourceImageData, dimensions, scaleFa
   
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
+      // Calculate element position (where the pixel will be drawn)
       const x = col * pixelSize + pixelSize / 2;
       const y = row * pixelSize + pixelSize / 2;
       
-      const srcX = Math.max(0, Math.min(srcWidth - 1, Math.round(x * srcWidth / width)));
-      const srcY = Math.max(0, Math.min(srcHeight - 1, Math.round(y * srcHeight / height)));
+      // Calculate sample position (where to read from source image)
+      // Apply offset here - this shifts what part of the image is sampled for this cell
+      const sampleX = x - offsetX;
+      const sampleY = y - offsetY;
+      
+      // Sample from source image at offset position
+      const srcX = Math.max(0, Math.min(srcWidth - 1, Math.round(sampleX * srcWidth / width)));
+      const srcY = Math.max(0, Math.min(srcHeight - 1, Math.round(sampleY * srcHeight / height)));
       const idx = (srcY * srcWidth + srcX) * 4;
       
       if (idx + 2 < data.length) {
@@ -421,6 +470,10 @@ function generateNoiseStipple(layer, sourceImageData, dimensions, scaleFactor) {
   const pixelSize = Math.max(2, Math.floor(layer.scale * scaleFactor));
   const decisionThreshold = 0.3 + (1 - layer.threshold) * 0.4;
   
+  // Layer offsets (scaled)
+  const offsetX = layer.offsetX * scaleFactor;
+  const offsetY = layer.offsetY * scaleFactor;
+  
   let svg = '';
   const dotRadius = pixelSize * 0.4;
   
@@ -435,11 +488,18 @@ function generateNoiseStipple(layer, sourceImageData, dimensions, scaleFactor) {
   
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
+      // Calculate element position (where the dot will be drawn)
       const x = col * pixelSize + pixelSize / 2;
       const y = row * pixelSize + pixelSize / 2;
       
-      const srcX = Math.max(0, Math.min(srcWidth - 1, Math.round(x * srcWidth / width)));
-      const srcY = Math.max(0, Math.min(srcHeight - 1, Math.round(y * srcHeight / height)));
+      // Calculate sample position (where to read from source image)
+      // Apply offset here - this shifts what part of the image is sampled for this cell
+      const sampleX = x - offsetX;
+      const sampleY = y - offsetY;
+      
+      // Sample from source image at offset position
+      const srcX = Math.max(0, Math.min(srcWidth - 1, Math.round(sampleX * srcWidth / width)));
+      const srcY = Math.max(0, Math.min(srcHeight - 1, Math.round(sampleY * srcHeight / height)));
       const idx = (srcY * srcWidth + srcX) * 4;
       
       if (idx + 2 < data.length) {
