@@ -400,6 +400,19 @@ export default function HalftoneLab() {
       }
     }
     
+    // Get the new palette keys
+    const newKeys = Object.keys(newPalette);
+    
+    // Update layers to use new palette keys BEFORE updating palette
+    // This prevents flicker from mismatched keys during the transition
+    setLayers(prevLayers => prevLayers.map((layer, index) => ({
+      ...layer,
+      colorKey: newKeys[index % newKeys.length]
+    })));
+    
+    // Update the ref to prevent useLayoutEffect from triggering another remap
+    prevPaletteKeysRef.current = newKeys;
+    
     setPalette(newPalette);
     saveCustomPalette(newPalette);
     showToast('Palette randomized');
@@ -596,15 +609,19 @@ export default function HalftoneLab() {
           ditheredData = applyInkBleed(ditheredData, debouncedInkBleedAmount, debouncedInkBleedRoughness, inkBleedScaleFactor);
         }
         
-        // Get palette color with fallback to prevent black frames during transitions
+        // Get palette color with fallback to prevent flicker during palette transitions
         let paletteColor = activePalette[layer.colorKey];
         if (!paletteColor && colorKeys.length > 0) {
-          // Fallback to first available color if key not found
-          paletteColor = activePalette[colorKeys[0]];
+          // Fallback to color at same index position to minimize visual disruption
+          paletteColor = activePalette[colorKeys[li % colorKeys.length]];
         }
-        const r = paletteColor?.rgb?.[0] ?? 128;
-        const g = paletteColor?.rgb?.[1] ?? 128;
-        const b = paletteColor?.rgb?.[2] ?? 128;
+        // Final fallback if still no color found
+        if (!paletteColor) {
+          paletteColor = { rgb: [128, 128, 128] };
+        }
+        const r = paletteColor.rgb[0];
+        const g = paletteColor.rgb[1];
+        const b = paletteColor.rgb[2];
         const blendFn = blendModes[layer.blendMode] || blendModes.multiply;
         const layerOpacity = layer.opacity;
         // Scale layer offsets for export (offsets are relative to preview size)
