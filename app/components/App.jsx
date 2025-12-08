@@ -36,6 +36,7 @@ import SavePresetModal from './ui/SavePresetModal';
 export default function HalftoneLab() {
   const [image, setImage] = useState(null);
   const [previewImage, setPreviewImage] = useState(null); // Downscaled for performance
+  const [imageScale, setImageScale] = useState(DEFAULT_STATE.imageScale);
   const [backgroundColor, setBackgroundColor] = useState(DEFAULT_STATE.backgroundColor);
   const [exportResolution, setExportResolution] = useState(DEFAULT_STATE.exportResolution);
   
@@ -102,6 +103,7 @@ export default function HalftoneLab() {
   
   // Debounce all processing-related state changes
   // Longer debounce for expensive operations
+  const debouncedImageScale = useDebounce(imageScale, 200);
   const debouncedBrightness = useDebounce(brightness, 100);
   const debouncedContrast = useDebounce(contrast, 100);
   const debouncedLayers = useDebounce(layers, 100);
@@ -140,6 +142,7 @@ export default function HalftoneLab() {
   
   // Reset all
   const resetAll = () => {
+    setImageScale(DEFAULT_STATE.imageScale);
     setBrightness(DEFAULT_STATE.brightness);
     setContrast(DEFAULT_STATE.contrast);
     setInvert(DEFAULT_STATE.invert);
@@ -466,32 +469,38 @@ export default function HalftoneLab() {
     const sourceCanvas = document.createElement('canvas');
     const sourceCtx = sourceCanvas.getContext('2d');
     
-    // Use source image dimensions directly (1:1 processing)
+    // For preview, use sourceImage dimensions (previewImage is already limited to PREVIEW_MAX_WIDTH)
+    // For export, use full image dimensions
     const outputWidth = sourceImage.width;
     const outputHeight = sourceImage.height;
     
     targetCanvas.width = outputWidth;
     targetCanvas.height = outputHeight;
-    sourceCanvas.width = outputWidth;
-    sourceCanvas.height = outputHeight;
+    
+    // For export, use full resolution; for preview, use scaled size
+    const scaledWidth = isExport ? sourceImage.width : Math.round(sourceImage.width * debouncedImageScale);
+    const scaledHeight = isExport ? sourceImage.height : Math.round(sourceImage.height * debouncedImageScale);
+    sourceCanvas.width = scaledWidth;
+    sourceCanvas.height = scaledHeight;
     
     // Calculate scale factor to make dither patterns consistent between preview and export
+    // The scale parameter in UI is relative to preview size
     // For preview: use scale as-is (scaleFactor = 1)
     // For export: scale up proportionally to match export dimensions
     const previewWidth = image ? (image.width > PREVIEW_MAX_WIDTH ? PREVIEW_MAX_WIDTH : image.width) : sourceImage.width;
     const scaleFactor = isExport ? (image ? image.width / previewWidth : 1) : 1;
     
     sourceCtx.fillStyle = '#888888';
-    sourceCtx.fillRect(0, 0, outputWidth, outputHeight);
+    sourceCtx.fillRect(0, 0, scaledWidth, scaledHeight);
     
     // Apply pre-blur if enabled
     if (debouncedPreBlur > 0) {
       sourceCtx.filter = `blur(${debouncedPreBlur}px)`;
     }
-    sourceCtx.drawImage(sourceImage, 0, 0, outputWidth, outputHeight);
+    sourceCtx.drawImage(sourceImage, 0, 0, scaledWidth, scaledHeight);
     sourceCtx.filter = 'none';
     
-    let sourceData = sourceCtx.getImageData(0, 0, outputWidth, outputHeight);
+    let sourceData = sourceCtx.getImageData(0, 0, scaledWidth, scaledHeight);
     
     if (debouncedBrightness !== 0 || debouncedContrast !== 0) {
       sourceData = applyBrightnessContrast(sourceData, debouncedBrightness, debouncedContrast);
@@ -549,17 +558,25 @@ export default function HalftoneLab() {
         const layerOffsetY = layer.offsetY;
         const ditheredDataArray = ditheredData.data;
         
-        // Direct 1:1 pixel mapping with offset support
+        // Direct 1:1 mapping for both preview and export
+        // Map from output coordinates to scaled coordinates when imageScale !== 1
+        const scaleX = scaledWidth / outputWidth;
+        const scaleY = scaledHeight / outputHeight;
+        
+        // Pre-calculate bounds to avoid per-pixel checks where possible
+        const minY = Math.max(0, Math.ceil(-layerOffsetY * scaleY));
+        const maxY = Math.min(outputHeight, Math.floor((scaledHeight - 1) / scaleY + layerOffsetY));
+        
         for (let y = 0; y < outputHeight; y++) {
-          const sy = y - layerOffsetY;
-          if (sy < 0 || sy >= outputHeight) continue;
+          const sy = Math.round((y - layerOffsetY) * scaleY);
+          if (sy < 0 || sy >= scaledHeight) continue;
           
-          const syw = sy * outputWidth;
+          const syw = sy * scaledWidth;
           const yw = y * outputWidth;
           
           for (let x = 0; x < outputWidth; x++) {
-            const sx = x - layerOffsetX;
-            if (sx < 0 || sx >= outputWidth) continue;
+            const sx = Math.round((x - layerOffsetX) * scaleX);
+            if (sx < 0 || sx >= scaledWidth) continue;
             
             const si = (syw + sx) << 2; // Faster than * 4
             const di = (yw + x) << 2;
@@ -577,7 +594,7 @@ export default function HalftoneLab() {
       }
     
     ctx.putImageData(baseImageData, 0, 0);
-  }, [debouncedBrightness, debouncedContrast, invert, debouncedPreBlur, debouncedLayers, backgroundColor, inkBleed, debouncedInkBleedAmount, debouncedInkBleedRoughness, image, activePalette]);
+  }, [debouncedImageScale, debouncedBrightness, debouncedContrast, invert, debouncedPreBlur, debouncedLayers, backgroundColor, inkBleed, debouncedInkBleedAmount, debouncedInkBleedRoughness, image, activePalette]);
 
   // Track pending updates to skip stale processing
   const pendingUpdateRef = useRef(0);
@@ -759,13 +776,16 @@ export default function HalftoneLab() {
     }
     
     try {
-      // Use 1:1 resolution matching processImageCore
-      const processingResolution = { w: previewImage.width, h: previewImage.height };
+      // Use the same scaled processing resolution as the preview
+      // Preview processes at previewImage.width * imageScale (matching processImageCore)
+      const scaledWidth = Math.round(previewImage.width * debouncedImageScale);
+      const scaledHeight = Math.round(previewImage.height * debouncedImageScale);
+      const processingResolution = { w: scaledWidth, h: scaledHeight };
       
       const sourceImageData = getSourceImageData(processingResolution);
       if (!sourceImageData) return;
       
-      // Dimensions match the actual image dimensions
+      // Dimensions match the actual downsampled image dimensions (maintains aspect ratio)
       const dimensions = {
         width: sourceImageData.width,
         height: sourceImageData.height
@@ -789,7 +809,7 @@ export default function HalftoneLab() {
       console.error('SVG export error:', error);
       showToast('SVG export failed: ' + error.message);
     }
-  }, [image, previewImage, debouncedLayers, backgroundColor, getSourceImageData]);
+  }, [image, previewImage, debouncedImageScale, debouncedLayers, backgroundColor, getSourceImageData]);
   
   // Export separate SVG layers as ZIP
   const exportSVGLayers = useCallback(async () => {
@@ -801,13 +821,16 @@ export default function HalftoneLab() {
     try {
       showToast('Generating layer files...');
       
-      // Use 1:1 resolution matching processImageCore
-      const processingResolution = { w: previewImage.width, h: previewImage.height };
+      // Use the same scaled processing resolution as the preview
+      // Preview processes at previewImage.width * imageScale (matching processImageCore)
+      const scaledWidth = Math.round(previewImage.width * debouncedImageScale);
+      const scaledHeight = Math.round(previewImage.height * debouncedImageScale);
+      const processingResolution = { w: scaledWidth, h: scaledHeight };
       
       const sourceImageData = getSourceImageData(processingResolution);
       if (!sourceImageData) return;
       
-      // Dimensions match the actual image dimensions
+      // Dimensions match the actual downsampled image dimensions (maintains aspect ratio)
       const dimensions = {
         width: sourceImageData.width,
         height: sourceImageData.height
@@ -828,7 +851,7 @@ export default function HalftoneLab() {
       console.error('SVG layers export error:', error);
       showToast('SVG export failed: ' + error.message);
     }
-  }, [image, previewImage, debouncedLayers, backgroundColor, getSourceImageData]);
+  }, [image, previewImage, debouncedImageScale, debouncedLayers, backgroundColor, getSourceImageData]);
 
   return (
     <DropZone onDrop={loadImageFile}>
@@ -852,6 +875,7 @@ export default function HalftoneLab() {
             
             {image && (
               <>
+                <Slider label={`SCALE ${Math.round(imageScale * 100)}%`} value={imageScale} min={0.5} max={2} step={0.05} onChange={setImageScale} />
                 <Slider label={`PRE-BLUR ${Math.round(preBlur)}px`} value={preBlur} min={0} max={20} step={0.5} onChange={setPreBlur} />
                 <Button onClick={randomizeLayers}>↻ RANDOMIZE</Button>
               </>

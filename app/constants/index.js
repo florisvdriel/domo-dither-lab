@@ -19,6 +19,7 @@ export const PREVIEW_MAX_WIDTH = 1200;
 
 // Default state values
 export const DEFAULT_STATE = {
+  imageScale: 1.0,
   brightness: 0,
   contrast: 0,
   invert: false,
