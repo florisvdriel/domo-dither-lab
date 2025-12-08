@@ -519,18 +519,23 @@ export default function HalftoneLab() {
     targetCanvas.width = outputWidth;
     targetCanvas.height = outputHeight;
     
-    // For export, use full resolution * export scale; for preview, use scaled size
-    const scaledWidth = isExport ? outputWidth : Math.round(sourceImage.width * debouncedImageScale);
-    const scaledHeight = isExport ? outputHeight : Math.round(sourceImage.height * debouncedImageScale);
+    // IMPORTANT: Source canvas stays at original resolution for crisp dithering
+    // Only the output and ink bleed effects are scaled up
+    // This prevents blurry halftone patterns from upscaled source images
+    const scaledWidth = isExport ? sourceImage.width : Math.round(sourceImage.width * debouncedImageScale);
+    const scaledHeight = isExport ? sourceImage.height : Math.round(sourceImage.height * debouncedImageScale);
     sourceCanvas.width = scaledWidth;
     sourceCanvas.height = scaledHeight;
     
     // Calculate scale factor to make dither patterns consistent between preview and export
     // The scale parameter in UI is relative to preview size
     // For preview: use scale as-is (scaleFactor = 1)
-    // For export: scale up proportionally to match export dimensions, including export resolution multiplier
+    // For export: scale up proportionally to match export dimensions (but NOT including exportScale for dithering)
     const previewWidth = image ? (image.width > PREVIEW_MAX_WIDTH ? PREVIEW_MAX_WIDTH : image.width) : sourceImage.width;
-    const scaleFactor = isExport ? (image ? (image.width / previewWidth) * exportScale : exportScale) : 1;
+    const scaleFactor = isExport ? (image ? image.width / previewWidth : 1) : 1;
+    
+    // Separate scale factor for ink bleed that includes export resolution
+    const inkBleedScaleFactor = scaleFactor * exportScale;
     
     sourceCtx.fillStyle = '#888888';
     sourceCtx.fillRect(0, 0, scaledWidth, scaledHeight);
@@ -586,9 +591,9 @@ export default function HalftoneLab() {
         }
         
         // Apply ink bleed to layer if enabled
-        // Pass scaleFactor so ink bleed scales proportionally for high-res exports
+        // Pass inkBleedScaleFactor so ink bleed scales proportionally for high-res exports
         if (inkBleed && debouncedInkBleedAmount > 0) {
-          ditheredData = applyInkBleed(ditheredData, debouncedInkBleedAmount, debouncedInkBleedRoughness, scaleFactor);
+          ditheredData = applyInkBleed(ditheredData, debouncedInkBleedAmount, debouncedInkBleedRoughness, inkBleedScaleFactor);
         }
         
         // Get palette color with fallback to prevent black frames during transitions
@@ -602,12 +607,14 @@ export default function HalftoneLab() {
         const b = paletteColor?.rgb?.[2] ?? 128;
         const blendFn = blendModes[layer.blendMode] || blendModes.multiply;
         const layerOpacity = layer.opacity;
-        const layerOffsetX = layer.offsetX;
-        const layerOffsetY = layer.offsetY;
+        // Scale layer offsets for export (offsets are relative to preview size)
+        const layerOffsetX = layer.offsetX * (isExport ? exportScale : 1);
+        const layerOffsetY = layer.offsetY * (isExport ? exportScale : 1);
         const ditheredDataArray = ditheredData.data;
         
-        // Direct 1:1 mapping for both preview and export
-        // Map from output coordinates to scaled coordinates when imageScale !== 1
+        // Map from output coordinates to dithered data coordinates
+        // For export: output is scaled up but dithered data is at original resolution
+        // scaleX/scaleY < 1 means we're upscaling (multiple output pixels per dithered pixel)
         const scaleX = scaledWidth / outputWidth;
         const scaleY = scaledHeight / outputHeight;
         
