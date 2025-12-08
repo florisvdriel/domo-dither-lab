@@ -9,25 +9,8 @@ import { CompactColorPicker } from './ColorPicker';
 import AlgorithmSelect from './AlgorithmSelect';
 import Slider from './Slider';
 
-export default function LayerPanel({ 
-  layer, 
-  index, 
-  totalLayers, 
-  onUpdate, 
-  onRemove, 
-  onDuplicate, 
-  onMoveUp, 
-  onMoveDown, 
-  canRemove, 
-  palette = null,
-  isExpanded: externalExpanded,
-  onToggleExpand
-}) {
-  // Support both controlled (external) and uncontrolled (internal) expanded state
-  const [internalExpanded, setInternalExpanded] = useState(index === 0);
-  const expanded = externalExpanded !== undefined ? externalExpanded : internalExpanded;
-  const handleToggleExpand = onToggleExpand || (() => setInternalExpanded(!internalExpanded));
-  
+export default function LayerPanel({ layer, index, totalLayers, onUpdate, onRemove, onDuplicate, onMoveUp, onMoveDown, canRemove, palette = null }) {
+  const [expanded, setExpanded] = useState(true);
   const [hovering, setHovering] = useState(false);
   const algoInfo = DITHER_ALGORITHMS[layer.ditherType];
   const isVisible = layer.visible !== false; // Default to true if not set
@@ -58,19 +41,8 @@ export default function LayerPanel({
               borderBottom: expanded ? '1px solid #222' : 'none',
               cursor: 'pointer'
             }}
-            onClick={handleToggleExpand}
+            onClick={() => setExpanded(!expanded)}
           >
-            {/* Expand/collapse indicator */}
-            <span style={{ 
-              fontSize: '8px', 
-              color: '#555', 
-              marginRight: '8px',
-              transition: 'transform 0.15s ease',
-              display: 'inline-block',
-              transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)'
-            }}>
-              ▶
-            </span>
             {/* Visibility toggle (eye icon) */}
             <IconButton 
               onClick={(e) => { e.stopPropagation(); onUpdate({ ...layer, visible: !isVisible }); }} 
@@ -79,12 +51,6 @@ export default function LayerPanel({
               {isVisible ? '👁' : '👁‍🗨'}
             </IconButton>
             <span style={{ fontSize: '10px', color: '#888', fontFamily: 'monospace', marginLeft: '8px' }}>LAYER {index + 1}</span>
-            {/* Show algorithm name when collapsed */}
-            {!expanded && (
-              <span style={{ fontSize: '9px', color: '#555', fontFamily: 'monospace', marginLeft: '8px' }}>
-                {DITHER_ALGORITHMS[layer.ditherType]?.name || layer.ditherType}
-              </span>
-            )}
             <div style={{ marginLeft: 'auto', display: 'flex', gap: '4px' }}>
               <IconButton onClick={(e) => { e.stopPropagation(); onDuplicate(); }} title="Duplicate">⧉</IconButton>
               <IconButton onClick={(e) => { e.stopPropagation(); onMoveUp(); }} disabled={index === 0} title="Move up">↑</IconButton>

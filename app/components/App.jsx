@@ -14,21 +14,16 @@ import { ditherAlgorithms, blendModes } from '../utils/dithering';
 import { applyBrightnessContrast, invertImageData, applyInkBleed } from '../utils/imageProcessing';
 import { loadCustomPresets, saveCustomPresets } from '../utils/storage';
 import { generateCombinedSVG, exportLayersAsZip, downloadSVG, estimateSVGSize } from '../utils/svgExport';
-// Web worker hook available for future optimization
-// import { useDitherWorker } from '../hooks/useDitherWorker';
-import { loadCustomPalette, saveCustomPalette, hexToRgb } from '../utils/paletteStorage';
-import { generateNamedPalette } from '../utils/paletteGenerator';
-
-// Hooks
-import { useHistory } from '../hooks/useHistory';
-import { useKeyboardShortcuts, createShortcuts } from '../hooks/useKeyboardShortcuts';
+import { useDitherWorker } from '../hooks/useDitherWorker';
+import { loadCustomPalette, saveCustomPalette, loadActivePaletteMode, saveActivePaletteMode } from '../utils/paletteStorage';
 
 // UI Components
 import Toast from './ui/Toast';
+import PaletteEditor from './ui/PaletteEditor';
 import Tooltip from './ui/Tooltip';
 import Slider from './ui/Slider';
 import Button from './ui/Button';
-import { SwatchWithPicker, ColorSwatch } from './ui/ColorPicker';
+import ColorPicker from './ui/ColorPicker';
 import Section from './ui/Section';
 import IconButton from './ui/IconButton';
 import AlgorithmSelect from './ui/AlgorithmSelect';
@@ -37,14 +32,10 @@ import DropZone from './ui/DropZone';
 import ComparisonSlider from './ui/ComparisonSlider';
 import SavePresetModal from './ui/SavePresetModal';
 
-// Session storage key
-const SESSION_STORAGE_KEY = 'halftone-lab-session';
-
 
 export default function HalftoneLab() {
   const [image, setImage] = useState(null);
   const [previewImage, setPreviewImage] = useState(null); // Downscaled for performance
-  const [imageScale, setImageScale] = useState(DEFAULT_STATE.imageScale);
   const [backgroundColor, setBackgroundColor] = useState(DEFAULT_STATE.backgroundColor);
   const [exportResolution, setExportResolution] = useState(DEFAULT_STATE.exportResolution);
   
@@ -75,66 +66,13 @@ export default function HalftoneLab() {
   const [customPresets, setCustomPresets] = useState(loadCustomPresets);
   const [showSaveModal, setShowSaveModal] = useState(false);
   
-  // Palette - load custom if exists, otherwise use default (without black/white for editing)
-  const [palette, setPalette] = useState(() => {
-    const saved = loadCustomPalette();
-    if (Object.keys(saved).length > 0) {
-      return saved;
-    }
-    // Extract just the 4 color keys from DEFAULT_PALETTE (excluding white/black)
-    const { white, black, ...colors } = DEFAULT_PALETTE;
-    return colors;
-  });
+  // Custom palette
+  const [customPalette, setCustomPalette] = useState(loadCustomPalette);
+  const [paletteMode, setPaletteMode] = useState(loadActivePaletteMode);
+  const [showPaletteEditor, setShowPaletteEditor] = useState(false);
   
   const [toastMessage, setToastMessage] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
-  
-  // Processing indicator state
-  const [isProcessing, setIsProcessing] = useState(false);
-  
-  // Expanded layer panel tracking (for keyboard shortcuts)
-  const [expandedLayerIndex, setExpandedLayerIndex] = useState(0);
-  
-  // History for undo/redo - tracks the undoable state
-  const getUndoableState = useCallback(() => ({
-    imageScale,
-    backgroundColor,
-    brightness,
-    contrast,
-    invert,
-    inkBleed,
-    inkBleedAmount,
-    inkBleedRoughness,
-    preBlur,
-    layers: JSON.parse(JSON.stringify(layers)), // Deep clone
-    palette: JSON.parse(JSON.stringify(palette)),
-  }), [imageScale, backgroundColor, brightness, contrast, invert, inkBleed, inkBleedAmount, inkBleedRoughness, preBlur, layers, palette]);
-  
-  const initialHistoryState = useMemo(() => ({
-    imageScale: DEFAULT_STATE.imageScale,
-    backgroundColor: DEFAULT_STATE.backgroundColor,
-    brightness: DEFAULT_STATE.brightness,
-    contrast: DEFAULT_STATE.contrast,
-    invert: DEFAULT_STATE.invert,
-    inkBleed: DEFAULT_STATE.inkBleed,
-    inkBleedAmount: DEFAULT_STATE.inkBleedAmount,
-    inkBleedRoughness: DEFAULT_STATE.inkBleedRoughness,
-    preBlur: DEFAULT_STATE.preBlur,
-    layers: DEFAULT_STATE.layers,
-    palette: (() => {
-      const { white, black, ...colors } = DEFAULT_PALETTE;
-      return colors;
-    })(),
-  }), []);
-  
-  const {
-    canUndo,
-    canRedo,
-    undo,
-    redo,
-    commitToHistory,
-    resetHistory
-  } = useHistory(initialHistoryState);
   
   const canvasRef = useRef(null);
   const originalCanvasRef = useRef(null);
@@ -144,23 +82,26 @@ export default function HalftoneLab() {
   const canvasContainerRef = useRef(null);
   const processingRef = useRef(false);
   
-  // Web worker available for future optimization (not currently used)
-  // const { dither: workerDither, isAvailable: isWorkerAvailable } = useDitherWorker();
+  // Web worker for off-main-thread dithering
+  const { dither: workerDither, isAvailable: isWorkerAvailable } = useDitherWorker();
 
-  // Active palette includes editable colors + black/white for backgrounds
+  // Active palette based on mode
   const activePalette = useMemo(() => {
-    return {
-      ...palette,
-      white: DEFAULT_PALETTE.white,
-      black: DEFAULT_PALETTE.black
-    };
-  }, [palette]);
+    if (paletteMode === 'custom' && Object.keys(customPalette).length > 0) {
+      // Merge custom palette with black/white for backgrounds
+      return {
+        ...customPalette,
+        white: DEFAULT_PALETTE.white,
+        black: DEFAULT_PALETTE.black
+      };
+    }
+    return DEFAULT_PALETTE;
+  }, [paletteMode, customPalette]);
 
   const colorKeys = Object.keys(activePalette).filter(k => !['white', 'black'].includes(k));
   
   // Debounce all processing-related state changes
   // Longer debounce for expensive operations
-  const debouncedImageScale = useDebounce(imageScale, 200);
   const debouncedBrightness = useDebounce(brightness, 100);
   const debouncedContrast = useDebounce(contrast, 100);
   const debouncedLayers = useDebounce(layers, 100);
@@ -172,146 +113,6 @@ export default function HalftoneLab() {
     setToastMessage(message);
     setToastVisible(true);
   };
-  
-  // Session persistence - save state to localStorage
-  const saveSession = useCallback(() => {
-    try {
-      const sessionData = {
-        imageScale,
-        backgroundColor,
-        brightness,
-        contrast,
-        invert,
-        inkBleed,
-        inkBleedAmount,
-        inkBleedRoughness,
-        preBlur,
-        layers,
-        palette,
-        exportResolution,
-        savedAt: Date.now()
-      };
-      localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionData));
-    } catch (err) {
-      console.warn('Failed to save session:', err);
-    }
-  }, [imageScale, backgroundColor, brightness, contrast, invert, inkBleed, inkBleedAmount, inkBleedRoughness, preBlur, layers, palette, exportResolution]);
-  
-  // Debounced session save
-  const saveSessionTimeoutRef = useRef(null);
-  useEffect(() => {
-    if (saveSessionTimeoutRef.current) {
-      clearTimeout(saveSessionTimeoutRef.current);
-    }
-    saveSessionTimeoutRef.current = setTimeout(saveSession, 1000);
-    return () => {
-      if (saveSessionTimeoutRef.current) {
-        clearTimeout(saveSessionTimeoutRef.current);
-      }
-    };
-  }, [saveSession]);
-  
-  // Restore session on mount
-  const hasRestoredSession = useRef(false);
-  useEffect(() => {
-    if (hasRestoredSession.current) return;
-    hasRestoredSession.current = true;
-    
-    try {
-      const saved = localStorage.getItem(SESSION_STORAGE_KEY);
-      if (!saved) return;
-      
-      const data = JSON.parse(saved);
-      const age = Date.now() - (data.savedAt || 0);
-      const maxAge = 24 * 60 * 60 * 1000; // 24 hours
-      
-      if (age > maxAge) {
-        localStorage.removeItem(SESSION_STORAGE_KEY);
-        return;
-      }
-      
-      // Restore state
-      if (data.imageScale !== undefined) setImageScale(data.imageScale);
-      if (data.backgroundColor !== undefined) setBackgroundColor(data.backgroundColor);
-      if (data.brightness !== undefined) setBrightness(data.brightness);
-      if (data.contrast !== undefined) setContrast(data.contrast);
-      if (data.invert !== undefined) setInvert(data.invert);
-      if (data.inkBleed !== undefined) setInkBleed(data.inkBleed);
-      if (data.inkBleedAmount !== undefined) setInkBleedAmount(data.inkBleedAmount);
-      if (data.inkBleedRoughness !== undefined) setInkBleedRoughness(data.inkBleedRoughness);
-      if (data.preBlur !== undefined) setPreBlur(data.preBlur);
-      if (data.layers) setLayers(data.layers);
-      if (data.palette) setPalette(data.palette);
-      if (data.exportResolution !== undefined) setExportResolution(data.exportResolution);
-      
-      showToast('Previous session restored');
-    } catch (err) {
-      console.warn('Failed to restore session:', err);
-    }
-  }, []);
-  
-  // Commit state to history when significant changes occur
-  const commitTimeoutRef = useRef(null);
-  useEffect(() => {
-    if (commitTimeoutRef.current) {
-      clearTimeout(commitTimeoutRef.current);
-    }
-    commitTimeoutRef.current = setTimeout(() => {
-      commitToHistory(getUndoableState());
-    }, 500);
-    return () => {
-      if (commitTimeoutRef.current) {
-        clearTimeout(commitTimeoutRef.current);
-      }
-    };
-  }, [imageScale, backgroundColor, brightness, contrast, invert, inkBleed, inkBleedAmount, inkBleedRoughness, preBlur, layers, palette, commitToHistory, getUndoableState]);
-  
-  // Undo handler
-  const handleUndo = useCallback(() => {
-    const prevState = undo();
-    if (prevState) {
-      setImageScale(prevState.imageScale);
-      setBackgroundColor(prevState.backgroundColor);
-      setBrightness(prevState.brightness);
-      setContrast(prevState.contrast);
-      setInvert(prevState.invert);
-      setInkBleed(prevState.inkBleed);
-      setInkBleedAmount(prevState.inkBleedAmount);
-      setInkBleedRoughness(prevState.inkBleedRoughness);
-      setPreBlur(prevState.preBlur);
-      setLayers(prevState.layers);
-      setPalette(prevState.palette);
-      showToast('Undo');
-    }
-  }, [undo]);
-  
-  // Redo handler
-  const handleRedo = useCallback(() => {
-    const nextState = redo();
-    if (nextState) {
-      setImageScale(nextState.imageScale);
-      setBackgroundColor(nextState.backgroundColor);
-      setBrightness(nextState.brightness);
-      setContrast(nextState.contrast);
-      setInvert(nextState.invert);
-      setInkBleed(nextState.inkBleed);
-      setInkBleedAmount(nextState.inkBleedAmount);
-      setInkBleedRoughness(nextState.inkBleedRoughness);
-      setPreBlur(nextState.preBlur);
-      setLayers(nextState.layers);
-      setPalette(nextState.palette);
-      showToast('Redo');
-    }
-  }, [redo]);
-  
-  // Clear session
-  const clearSession = useCallback(() => {
-    try {
-      localStorage.removeItem(SESSION_STORAGE_KEY);
-    } catch (err) {
-      console.warn('Failed to clear session:', err);
-    }
-  }, []);
   
   // Create preview image (downscaled for performance)
   useEffect(() => {
@@ -339,7 +140,6 @@ export default function HalftoneLab() {
   
   // Reset all
   const resetAll = () => {
-    setImageScale(DEFAULT_STATE.imageScale);
     setBrightness(DEFAULT_STATE.brightness);
     setContrast(DEFAULT_STATE.contrast);
     setInvert(DEFAULT_STATE.invert);
@@ -460,8 +260,8 @@ export default function HalftoneLab() {
       version: 1,
       exportedAt: new Date().toISOString(),
       presets: customPresets,
-      // Include custom palette with presets
-      palette: palette
+      // Optionally include custom palette if it exists
+      ...(Object.keys(customPalette).length > 0 && { palette: customPalette })
     };
     
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
@@ -514,8 +314,8 @@ export default function HalftoneLab() {
         
         // Also import palette if present
         if (data.palette && typeof data.palette === 'object' && Object.keys(data.palette).length > 0) {
-          const newPalette = { ...palette, ...data.palette };
-          setPalette(newPalette);
+          const newPalette = { ...customPalette, ...data.palette };
+          setCustomPalette(newPalette);
           saveCustomPalette(newPalette);
           showToast(`Imported ${validPresets} preset(s) and palette`);
         } else {
@@ -533,53 +333,39 @@ export default function HalftoneLab() {
   };
 
   // Palette functions
-  const updatePaletteColor = (colorKey, newHex) => {
-    const newPalette = {
-      ...palette,
-      [colorKey]: {
-        ...palette[colorKey],
-        hex: newHex.toUpperCase(),
-        rgb: hexToRgb(newHex)
-      }
-    };
-    setPalette(newPalette);
+  const handleSavePalette = (newPalette) => {
+    setCustomPalette(newPalette);
     saveCustomPalette(newPalette);
+    setShowPaletteEditor(false);
+    
+    // If palette is empty, switch back to default
+    if (Object.keys(newPalette).length === 0) {
+      setPaletteMode('default');
+      saveActivePaletteMode('default');
+      showToast('Custom palette cleared');
+    } else {
+      // Auto-switch to custom mode when saving
+      if (paletteMode !== 'custom') {
+        setPaletteMode('custom');
+        saveActivePaletteMode('custom');
+      }
+      showToast('Palette saved');
+    }
   };
 
-  const randomizePalette = () => {
-    // Generate a random 4-color palette using tetradic harmony
-    const harmonyTypes = ['tetradic', 'analogous', 'triadic', 'splitComplementary'];
-    const randomHarmony = harmonyTypes[Math.floor(Math.random() * harmonyTypes.length)];
-    let newPalette = generateNamedPalette(randomHarmony);
+  const togglePaletteMode = () => {
+    const newMode = paletteMode === 'default' ? 'custom' : 'default';
     
-    // Ensure we have exactly 4 colors
-    const paletteEntries = Object.entries(newPalette);
-    if (paletteEntries.length > 4) {
-      newPalette = Object.fromEntries(paletteEntries.slice(0, 4));
-    } else if (paletteEntries.length < 4) {
-      // If less than 4, generate more colors
-      const additionalPalette = generateNamedPalette('tetradic');
-      const additionalEntries = Object.entries(additionalPalette);
-      let i = 0;
-      while (Object.keys(newPalette).length < 4 && i < additionalEntries.length) {
-        const [key, value] = additionalEntries[i];
-        if (!newPalette[key]) {
-          newPalette[key] = value;
-        }
-        i++;
-      }
+    // Don't allow switching to custom if no custom colors
+    if (newMode === 'custom' && Object.keys(customPalette).length === 0) {
+      showToast('Add custom colors first');
+      setShowPaletteEditor(true);
+      return;
     }
     
-    setPalette(newPalette);
-    saveCustomPalette(newPalette);
-    showToast('Palette randomized');
-  };
-
-  const resetPalette = () => {
-    const { white, black, ...colors } = DEFAULT_PALETTE;
-    setPalette(colors);
-    saveCustomPalette(colors);
-    showToast('Palette reset to default');
+    setPaletteMode(newMode);
+    saveActivePaletteMode(newMode);
+    showToast(`Using ${newMode === 'default' ? 'default' : 'custom'} palette`);
   };
 
   // Randomizer
@@ -680,38 +466,32 @@ export default function HalftoneLab() {
     const sourceCanvas = document.createElement('canvas');
     const sourceCtx = sourceCanvas.getContext('2d');
     
-    // For preview, use sourceImage dimensions (previewImage is already limited to PREVIEW_MAX_WIDTH)
-    // For export, use full image dimensions
+    // Use source image dimensions directly (1:1 processing)
     const outputWidth = sourceImage.width;
     const outputHeight = sourceImage.height;
     
     targetCanvas.width = outputWidth;
     targetCanvas.height = outputHeight;
-    
-    // For export, use full resolution; for preview, use scaled size
-    const scaledWidth = isExport ? sourceImage.width : Math.round(sourceImage.width * debouncedImageScale);
-    const scaledHeight = isExport ? sourceImage.height : Math.round(sourceImage.height * debouncedImageScale);
-    sourceCanvas.width = scaledWidth;
-    sourceCanvas.height = scaledHeight;
+    sourceCanvas.width = outputWidth;
+    sourceCanvas.height = outputHeight;
     
     // Calculate scale factor to make dither patterns consistent between preview and export
-    // The scale parameter in UI is relative to preview size
     // For preview: use scale as-is (scaleFactor = 1)
     // For export: scale up proportionally to match export dimensions
     const previewWidth = image ? (image.width > PREVIEW_MAX_WIDTH ? PREVIEW_MAX_WIDTH : image.width) : sourceImage.width;
     const scaleFactor = isExport ? (image ? image.width / previewWidth : 1) : 1;
     
     sourceCtx.fillStyle = '#888888';
-    sourceCtx.fillRect(0, 0, scaledWidth, scaledHeight);
+    sourceCtx.fillRect(0, 0, outputWidth, outputHeight);
     
     // Apply pre-blur if enabled
     if (debouncedPreBlur > 0) {
       sourceCtx.filter = `blur(${debouncedPreBlur}px)`;
     }
-    sourceCtx.drawImage(sourceImage, 0, 0, scaledWidth, scaledHeight);
+    sourceCtx.drawImage(sourceImage, 0, 0, outputWidth, outputHeight);
     sourceCtx.filter = 'none';
     
-    let sourceData = sourceCtx.getImageData(0, 0, scaledWidth, scaledHeight);
+    let sourceData = sourceCtx.getImageData(0, 0, outputWidth, outputHeight);
     
     if (debouncedBrightness !== 0 || debouncedContrast !== 0) {
       sourceData = applyBrightnessContrast(sourceData, debouncedBrightness, debouncedContrast);
@@ -755,9 +535,8 @@ export default function HalftoneLab() {
         }
         
         // Apply ink bleed to layer if enabled
-        // Pass scaleFactor to ensure bleed effect scales proportionally with export resolution
         if (inkBleed && debouncedInkBleedAmount > 0) {
-          ditheredData = applyInkBleed(ditheredData, debouncedInkBleedAmount, debouncedInkBleedRoughness, scaleFactor);
+          ditheredData = applyInkBleed(ditheredData, debouncedInkBleedAmount, debouncedInkBleedRoughness);
         }
         
         const paletteColor = activePalette[layer.colorKey];
@@ -770,25 +549,17 @@ export default function HalftoneLab() {
         const layerOffsetY = layer.offsetY;
         const ditheredDataArray = ditheredData.data;
         
-        // Direct 1:1 mapping for both preview and export
-        // Map from output coordinates to scaled coordinates when imageScale !== 1
-        const scaleX = scaledWidth / outputWidth;
-        const scaleY = scaledHeight / outputHeight;
-        
-        // Pre-calculate bounds to avoid per-pixel checks where possible
-        const minY = Math.max(0, Math.ceil(-layerOffsetY * scaleY));
-        const maxY = Math.min(outputHeight, Math.floor((scaledHeight - 1) / scaleY + layerOffsetY));
-        
+        // Direct 1:1 pixel mapping with offset support
         for (let y = 0; y < outputHeight; y++) {
-          const sy = Math.round((y - layerOffsetY) * scaleY);
-          if (sy < 0 || sy >= scaledHeight) continue;
+          const sy = y - layerOffsetY;
+          if (sy < 0 || sy >= outputHeight) continue;
           
-          const syw = sy * scaledWidth;
+          const syw = sy * outputWidth;
           const yw = y * outputWidth;
           
           for (let x = 0; x < outputWidth; x++) {
-            const sx = Math.round((x - layerOffsetX) * scaleX);
-            if (sx < 0 || sx >= scaledWidth) continue;
+            const sx = x - layerOffsetX;
+            if (sx < 0 || sx >= outputWidth) continue;
             
             const si = (syw + sx) << 2; // Faster than * 4
             const di = (yw + x) << 2;
@@ -806,7 +577,7 @@ export default function HalftoneLab() {
       }
     
     ctx.putImageData(baseImageData, 0, 0);
-  }, [debouncedImageScale, debouncedBrightness, debouncedContrast, invert, debouncedPreBlur, debouncedLayers, backgroundColor, inkBleed, debouncedInkBleedAmount, debouncedInkBleedRoughness, image, activePalette]);
+  }, [debouncedBrightness, debouncedContrast, invert, debouncedPreBlur, debouncedLayers, backgroundColor, inkBleed, debouncedInkBleedAmount, debouncedInkBleedRoughness, image, activePalette]);
 
   // Track pending updates to skip stale processing
   const pendingUpdateRef = useRef(0);
@@ -822,14 +593,12 @@ export default function HalftoneLab() {
     if (processingRef.current) return;
     
     processingRef.current = true;
-    setIsProcessing(true);
     
     // Use requestAnimationFrame for smooth rendering
     requestAnimationFrame(() => {
       // Skip if a newer update was requested
       if (updateId !== pendingUpdateRef.current) {
         processingRef.current = false;
-        setIsProcessing(false);
         return;
       }
       
@@ -837,7 +606,6 @@ export default function HalftoneLab() {
       const originalCanvas = originalCanvasRef.current;
       if (!originalCanvas) {
         processingRef.current = false;
-        setIsProcessing(false);
         return;
       }
       const originalCtx = originalCanvas.getContext('2d');
@@ -851,7 +619,6 @@ export default function HalftoneLab() {
       }
       
       processingRef.current = false;
-      setIsProcessing(false);
       
       // Check if there's a pending newer update
       if (updateId !== pendingUpdateRef.current) {
@@ -859,10 +626,8 @@ export default function HalftoneLab() {
         requestAnimationFrame(() => {
           if (!processingRef.current && canvasRef.current) {
             processingRef.current = true;
-            setIsProcessing(true);
             processImageCore(previewImage, canvasRef.current);
             processingRef.current = false;
-            setIsProcessing(false);
           }
         });
       }
@@ -994,16 +759,13 @@ export default function HalftoneLab() {
     }
     
     try {
-      // Use the same scaled processing resolution as the preview
-      // Preview processes at previewImage.width * imageScale (matching processImageCore)
-      const scaledWidth = Math.round(previewImage.width * debouncedImageScale);
-      const scaledHeight = Math.round(previewImage.height * debouncedImageScale);
-      const processingResolution = { w: scaledWidth, h: scaledHeight };
+      // Use 1:1 resolution matching processImageCore
+      const processingResolution = { w: previewImage.width, h: previewImage.height };
       
       const sourceImageData = getSourceImageData(processingResolution);
       if (!sourceImageData) return;
       
-      // Dimensions match the actual downsampled image dimensions (maintains aspect ratio)
+      // Dimensions match the actual image dimensions
       const dimensions = {
         width: sourceImageData.width,
         height: sourceImageData.height
@@ -1015,8 +777,7 @@ export default function HalftoneLab() {
         sourceImageData,
         dimensions,
         backgroundColor,
-        { scaleFactor: 1 },
-        activePalette
+        { scaleFactor: 1 }
       );
       
       downloadSVG(svg, 'halftone-combined.svg');
@@ -1028,7 +789,7 @@ export default function HalftoneLab() {
       console.error('SVG export error:', error);
       showToast('SVG export failed: ' + error.message);
     }
-  }, [image, previewImage, debouncedImageScale, debouncedLayers, backgroundColor, getSourceImageData, activePalette]);
+  }, [image, previewImage, debouncedLayers, backgroundColor, getSourceImageData]);
   
   // Export separate SVG layers as ZIP
   const exportSVGLayers = useCallback(async () => {
@@ -1040,16 +801,13 @@ export default function HalftoneLab() {
     try {
       showToast('Generating layer files...');
       
-      // Use the same scaled processing resolution as the preview
-      // Preview processes at previewImage.width * imageScale (matching processImageCore)
-      const scaledWidth = Math.round(previewImage.width * debouncedImageScale);
-      const scaledHeight = Math.round(previewImage.height * debouncedImageScale);
-      const processingResolution = { w: scaledWidth, h: scaledHeight };
+      // Use 1:1 resolution matching processImageCore
+      const processingResolution = { w: previewImage.width, h: previewImage.height };
       
       const sourceImageData = getSourceImageData(processingResolution);
       if (!sourceImageData) return;
       
-      // Dimensions match the actual downsampled image dimensions (maintains aspect ratio)
+      // Dimensions match the actual image dimensions
       const dimensions = {
         width: sourceImageData.width,
         height: sourceImageData.height
@@ -1061,8 +819,7 @@ export default function HalftoneLab() {
         sourceImageData,
         dimensions,
         backgroundColor,
-        { scaleFactor: 1 },
-        activePalette
+        { scaleFactor: 1 }
       );
       
       const visibleLayers = debouncedLayers.filter(l => l.visible !== false);
@@ -1071,36 +828,7 @@ export default function HalftoneLab() {
       console.error('SVG layers export error:', error);
       showToast('SVG export failed: ' + error.message);
     }
-  }, [image, previewImage, debouncedImageScale, debouncedLayers, backgroundColor, getSourceImageData, activePalette]);
-
-  // Toggle layer visibility by index
-  const toggleLayerVisibility = useCallback((index) => {
-    if (index >= 0 && index < layers.length) {
-      const newLayers = [...layers];
-      newLayers[index] = { ...newLayers[index], visible: !newLayers[index].visible };
-      setLayers(newLayers);
-    }
-  }, [layers]);
-
-  // Keyboard shortcuts
-  const shortcuts = useMemo(() => createShortcuts({
-    onUndo: handleUndo,
-    onRedo: handleRedo,
-    onExport: () => image && exportPNG(),
-    onRandomize: () => image && randomizeLayers(),
-    onToggleComparison: () => image && setShowComparison(prev => !prev),
-    onZoomIn: () => setImageTransform(prev => ({ ...prev, scale: Math.min(8, prev.scale * 1.5) })),
-    onZoomOut: () => setImageTransform(prev => ({ ...prev, scale: Math.max(0.25, prev.scale / 1.5) })),
-    onResetZoom: () => setImageTransform(prev => ({ ...prev, scale: 1 })),
-    onSelectLayer: (index) => {
-      if (index < layers.length) {
-        setExpandedLayerIndex(index);
-      }
-    },
-    onToggleLayerVisibility: toggleLayerVisibility
-  }), [handleUndo, handleRedo, image, exportPNG, randomizeLayers, layers.length, toggleLayerVisibility]);
-  
-  useKeyboardShortcuts(shortcuts, { enabled: !showSaveModal });
+  }, [image, previewImage, debouncedLayers, backgroundColor, getSourceImageData]);
 
   return (
     <DropZone onDrop={loadImageFile}>
@@ -1111,18 +839,7 @@ export default function HalftoneLab() {
           {/* Header */}
           <div style={{ padding: '20px 16px', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h1 style={{ fontSize: '11px', letterSpacing: '0.2em', margin: 0, fontWeight: 400 }}>HALFTONE LAB</h1>
-            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-              <Tooltip text="Undo (⌘Z)">
-                <IconButton onClick={handleUndo} disabled={!canUndo} title="Undo">↶</IconButton>
-              </Tooltip>
-              <Tooltip text="Redo (⌘⇧Z)">
-                <IconButton onClick={handleRedo} disabled={!canRedo} title="Redo">↷</IconButton>
-              </Tooltip>
-              <div style={{ width: '8px' }} />
-              <Tooltip text="Reset all settings">
-                <IconButton onClick={resetAll} title="Reset all">↺</IconButton>
-              </Tooltip>
-            </div>
+            <IconButton onClick={resetAll} title="Reset all">↺</IconButton>
           </div>
           
           {/* Source Section */}
@@ -1135,7 +852,6 @@ export default function HalftoneLab() {
             
             {image && (
               <>
-                <Slider label={`SCALE ${Math.round(imageScale * 100)}%`} value={imageScale} min={0.5} max={2} step={0.05} onChange={setImageScale} />
                 <Slider label={`PRE-BLUR ${Math.round(preBlur)}px`} value={preBlur} min={0} max={20} step={0.5} onChange={setPreBlur} />
                 <Button onClick={randomizeLayers}>↻ RANDOMIZE</Button>
               </>
@@ -1143,36 +859,53 @@ export default function HalftoneLab() {
           </Section>
           
           {/* Palette Section */}
-          <Section title="PALETTE">
-            {/* Editable color swatches */}
+          <Section title="PALETTE" defaultOpen={false}>
+            <div style={{ display: 'flex', gap: '4px', marginBottom: '12px' }}>
+              <Button 
+                onClick={togglePaletteMode} 
+                active={paletteMode === 'default'} 
+                style={{ flex: 1, fontSize: '9px' }}
+              >
+                DEFAULT
+              </Button>
+              <Button 
+                onClick={togglePaletteMode} 
+                active={paletteMode === 'custom'} 
+                style={{ flex: 1, fontSize: '9px' }}
+              >
+                CUSTOM
+              </Button>
+            </div>
+            
+            {/* Palette preview */}
             <div style={{ 
               display: 'flex', 
-              gap: '8px', 
+              gap: '2px', 
               marginBottom: '12px',
-              alignItems: 'flex-start'
+              height: '24px'
             }}>
               {colorKeys.map(key => (
-                <SwatchWithPicker
-                  key={key}
-                  color={palette[key]?.hex || '#000000'}
-                  onChange={(newHex) => updatePaletteColor(key, newHex)}
-                  size={40}
+                <div 
+                  key={key} 
+                  style={{ 
+                    flex: 1, 
+                    backgroundColor: activePalette[key]?.hex || '#000',
+                    border: '1px solid #333'
+                  }} 
+                  title={activePalette[key]?.name || key}
                 />
               ))}
             </div>
             
-            {/* Palette actions */}
-            <div style={{ display: 'flex', gap: '4px' }}>
-              <Button onClick={randomizePalette} style={{ flex: 1 }}>
-                ↻ RANDOMIZE
-              </Button>
-              <Button onClick={resetPalette} style={{ flex: 1, opacity: 0.7 }}>
-                RESET
-              </Button>
-            </div>
+            <Button onClick={() => setShowPaletteEditor(true)} style={{ opacity: 0.7 }}>
+              {Object.keys(customPalette).length > 0 ? 'EDIT CUSTOM COLORS' : '+ ADD CUSTOM COLORS'}
+            </Button>
             
-            <p style={{ fontSize: '9px', color: '#444', margin: '8px 0 0 0', textAlign: 'center' }}>
-              Click swatches to edit colors
+            <p style={{ fontSize: '9px', color: '#444', margin: '8px 0 0 0' }}>
+              {paletteMode === 'default' 
+                ? 'Using default palette' 
+                : `Using ${Object.keys(customPalette).length} custom color${Object.keys(customPalette).length !== 1 ? 's' : ''}`
+              }
             </p>
           </Section>
           
@@ -1285,10 +1018,10 @@ export default function HalftoneLab() {
             </div>
             
             <Button onClick={() => setPaperTexture(!paperTexture)} active={paperTexture}>
-              {paperTexture ? '● PAPER PREVIEW ON' : '○ PAPER PREVIEW'}
+              {paperTexture ? '● PAPER MODE ON' : '○ PAPER MODE'}
             </Button>
-            <p style={{ fontSize: '9px', color: '#666', margin: '8px 0 0 0' }}>
-              ⚠ Preview only — does not affect exports
+            <p style={{ fontSize: '9px', color: '#444', margin: '8px 0 0 0' }}>
+              Adds warm paper tint and texture overlay
             </p>
           </Section>
           
@@ -1307,60 +1040,22 @@ export default function HalftoneLab() {
                   onMoveDown={() => moveLayerDown(i)}
                   canRemove={layers.length > 1}
                   palette={activePalette}
-                  isExpanded={expandedLayerIndex === i}
-                  onToggleExpand={() => setExpandedLayerIndex(expandedLayerIndex === i ? -1 : i)}
                 />
               ))}
               {layers.length < 4 && (
                 <Button onClick={addLayer}>+ ADD LAYER</Button>
               )}
-              <p style={{ fontSize: '8px', color: '#444', margin: '12px 0 0 0', textAlign: 'center' }}>
-                Press 1-4 to select layer • Shift+1-4 to toggle visibility
-              </p>
           </Section>
           
           {/* Output Section */}
           <Section title="OUTPUT">
-            <label style={{ 
-              display: 'block', 
-              color: '#666', 
-              fontSize: '10px', 
-              marginBottom: '8px', 
-              fontFamily: 'monospace',
-              letterSpacing: '0.05em'
-            }}>
-              BACKGROUND
-            </label>
-            <div style={{ 
-              display: 'flex', 
-              gap: '6px', 
-              marginBottom: '16px',
-              flexWrap: 'wrap'
-            }}>
-              {/* Palette colors */}
-              {colorKeys.map(key => (
-                <ColorSwatch
-                  key={key}
-                  color={palette[key]?.hex || '#000000'}
-                  selected={backgroundColor === palette[key]?.hex}
-                  onClick={() => setBackgroundColor(palette[key]?.hex)}
-                  size={28}
-                />
-              ))}
-              {/* Black and white */}
-              <ColorSwatch
-                color="#000000"
-                selected={backgroundColor === '#000000'}
-                onClick={() => setBackgroundColor('#000000')}
-                size={28}
-              />
-              <ColorSwatch
-                color="#FFFFFF"
-                selected={backgroundColor === '#FFFFFF' || backgroundColor === '#ffffff'}
-                onClick={() => setBackgroundColor('#FFFFFF')}
-                size={28}
-              />
-            </div>
+            <ColorPicker 
+              value={backgroundColor === '#ffffff' ? 'white' : backgroundColor === '#000000' ? 'black' : ''} 
+              onChange={(k) => setBackgroundColor(activePalette[k].hex)} 
+              label="BACKGROUND" 
+              showAll 
+              palette={activePalette}
+            />
             
             <label style={{ display: 'block', color: '#666', fontSize: '10px', marginBottom: '8px', fontFamily: 'monospace' }}>RESOLUTION</label>
             <div style={{ display: 'flex', gap: '4px', marginBottom: '16px' }}>
@@ -1434,37 +1129,6 @@ export default function HalftoneLab() {
               backgroundRepeat: 'repeat',
               zIndex: 20
             }} />
-          )}
-          
-          {/* Processing indicator */}
-          {isProcessing && image && (
-            <div style={{
-              position: 'absolute',
-              top: '16px',
-              left: '50%',
-              transform: 'translateX(-50%)',
-              backgroundColor: 'rgba(0,0,0,0.7)',
-              padding: '6px 12px',
-              fontSize: '9px',
-              color: '#888',
-              fontFamily: 'monospace',
-              letterSpacing: '0.1em',
-              zIndex: 30,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px'
-            }}>
-              <span style={{
-                display: 'inline-block',
-                width: '8px',
-                height: '8px',
-                border: '1px solid #555',
-                borderTopColor: '#fff',
-                borderRadius: '50%',
-                animation: 'spin 0.8s linear infinite'
-              }} />
-              PROCESSING
-            </div>
           )}
           
           {/* Top bar */}
@@ -1589,6 +1253,14 @@ export default function HalftoneLab() {
           <SavePresetModal 
             onSave={saveCustomPreset} 
             onCancel={() => setShowSaveModal(false)} 
+          />
+        )}
+        
+        {showPaletteEditor && (
+          <PaletteEditor 
+            palette={customPalette}
+            onSave={handleSavePalette}
+            onCancel={() => setShowPaletteEditor(false)}
           />
         )}
       </div>
