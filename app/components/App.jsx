@@ -14,9 +14,14 @@ import { ditherAlgorithms, blendModes } from '../utils/dithering';
 import { applyBrightnessContrast, invertImageData, applyInkBleed } from '../utils/imageProcessing';
 import { loadCustomPresets, saveCustomPresets } from '../utils/storage';
 import { generateCombinedSVG, exportLayersAsZip, downloadSVG, estimateSVGSize } from '../utils/svgExport';
-import { useDitherWorker } from '../hooks/useDitherWorker';
+// Web worker hook available for future optimization
+// import { useDitherWorker } from '../hooks/useDitherWorker';
 import { loadCustomPalette, saveCustomPalette, hexToRgb } from '../utils/paletteStorage';
 import { generateNamedPalette } from '../utils/paletteGenerator';
+
+// Hooks
+import { useHistory } from '../hooks/useHistory';
+import { useKeyboardShortcuts, createShortcuts } from '../hooks/useKeyboardShortcuts';
 
 // UI Components
 import Toast from './ui/Toast';
@@ -31,6 +36,9 @@ import LayerPanel from './ui/LayerPanel';
 import DropZone from './ui/DropZone';
 import ComparisonSlider from './ui/ComparisonSlider';
 import SavePresetModal from './ui/SavePresetModal';
+
+// Session storage key
+const SESSION_STORAGE_KEY = 'halftone-lab-session';
 
 
 export default function HalftoneLab() {
@@ -81,6 +89,53 @@ export default function HalftoneLab() {
   const [toastMessage, setToastMessage] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
   
+  // Processing indicator state
+  const [isProcessing, setIsProcessing] = useState(false);
+  
+  // Expanded layer panel tracking (for keyboard shortcuts)
+  const [expandedLayerIndex, setExpandedLayerIndex] = useState(0);
+  
+  // History for undo/redo - tracks the undoable state
+  const getUndoableState = useCallback(() => ({
+    imageScale,
+    backgroundColor,
+    brightness,
+    contrast,
+    invert,
+    inkBleed,
+    inkBleedAmount,
+    inkBleedRoughness,
+    preBlur,
+    layers: JSON.parse(JSON.stringify(layers)), // Deep clone
+    palette: JSON.parse(JSON.stringify(palette)),
+  }), [imageScale, backgroundColor, brightness, contrast, invert, inkBleed, inkBleedAmount, inkBleedRoughness, preBlur, layers, palette]);
+  
+  const initialHistoryState = useMemo(() => ({
+    imageScale: DEFAULT_STATE.imageScale,
+    backgroundColor: DEFAULT_STATE.backgroundColor,
+    brightness: DEFAULT_STATE.brightness,
+    contrast: DEFAULT_STATE.contrast,
+    invert: DEFAULT_STATE.invert,
+    inkBleed: DEFAULT_STATE.inkBleed,
+    inkBleedAmount: DEFAULT_STATE.inkBleedAmount,
+    inkBleedRoughness: DEFAULT_STATE.inkBleedRoughness,
+    preBlur: DEFAULT_STATE.preBlur,
+    layers: DEFAULT_STATE.layers,
+    palette: (() => {
+      const { white, black, ...colors } = DEFAULT_PALETTE;
+      return colors;
+    })(),
+  }), []);
+  
+  const {
+    canUndo,
+    canRedo,
+    undo,
+    redo,
+    commitToHistory,
+    resetHistory
+  } = useHistory(initialHistoryState);
+  
   const canvasRef = useRef(null);
   const originalCanvasRef = useRef(null);
   const sourceCanvasRef = useRef(null);
@@ -89,8 +144,8 @@ export default function HalftoneLab() {
   const canvasContainerRef = useRef(null);
   const processingRef = useRef(false);
   
-  // Web worker for off-main-thread dithering
-  const { dither: workerDither, isAvailable: isWorkerAvailable } = useDitherWorker();
+  // Web worker available for future optimization (not currently used)
+  // const { dither: workerDither, isAvailable: isWorkerAvailable } = useDitherWorker();
 
   // Active palette includes editable colors + black/white for backgrounds
   const activePalette = useMemo(() => {
@@ -117,6 +172,146 @@ export default function HalftoneLab() {
     setToastMessage(message);
     setToastVisible(true);
   };
+  
+  // Session persistence - save state to localStorage
+  const saveSession = useCallback(() => {
+    try {
+      const sessionData = {
+        imageScale,
+        backgroundColor,
+        brightness,
+        contrast,
+        invert,
+        inkBleed,
+        inkBleedAmount,
+        inkBleedRoughness,
+        preBlur,
+        layers,
+        palette,
+        exportResolution,
+        savedAt: Date.now()
+      };
+      localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionData));
+    } catch (err) {
+      console.warn('Failed to save session:', err);
+    }
+  }, [imageScale, backgroundColor, brightness, contrast, invert, inkBleed, inkBleedAmount, inkBleedRoughness, preBlur, layers, palette, exportResolution]);
+  
+  // Debounced session save
+  const saveSessionTimeoutRef = useRef(null);
+  useEffect(() => {
+    if (saveSessionTimeoutRef.current) {
+      clearTimeout(saveSessionTimeoutRef.current);
+    }
+    saveSessionTimeoutRef.current = setTimeout(saveSession, 1000);
+    return () => {
+      if (saveSessionTimeoutRef.current) {
+        clearTimeout(saveSessionTimeoutRef.current);
+      }
+    };
+  }, [saveSession]);
+  
+  // Restore session on mount
+  const hasRestoredSession = useRef(false);
+  useEffect(() => {
+    if (hasRestoredSession.current) return;
+    hasRestoredSession.current = true;
+    
+    try {
+      const saved = localStorage.getItem(SESSION_STORAGE_KEY);
+      if (!saved) return;
+      
+      const data = JSON.parse(saved);
+      const age = Date.now() - (data.savedAt || 0);
+      const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+      
+      if (age > maxAge) {
+        localStorage.removeItem(SESSION_STORAGE_KEY);
+        return;
+      }
+      
+      // Restore state
+      if (data.imageScale !== undefined) setImageScale(data.imageScale);
+      if (data.backgroundColor !== undefined) setBackgroundColor(data.backgroundColor);
+      if (data.brightness !== undefined) setBrightness(data.brightness);
+      if (data.contrast !== undefined) setContrast(data.contrast);
+      if (data.invert !== undefined) setInvert(data.invert);
+      if (data.inkBleed !== undefined) setInkBleed(data.inkBleed);
+      if (data.inkBleedAmount !== undefined) setInkBleedAmount(data.inkBleedAmount);
+      if (data.inkBleedRoughness !== undefined) setInkBleedRoughness(data.inkBleedRoughness);
+      if (data.preBlur !== undefined) setPreBlur(data.preBlur);
+      if (data.layers) setLayers(data.layers);
+      if (data.palette) setPalette(data.palette);
+      if (data.exportResolution !== undefined) setExportResolution(data.exportResolution);
+      
+      showToast('Previous session restored');
+    } catch (err) {
+      console.warn('Failed to restore session:', err);
+    }
+  }, []);
+  
+  // Commit state to history when significant changes occur
+  const commitTimeoutRef = useRef(null);
+  useEffect(() => {
+    if (commitTimeoutRef.current) {
+      clearTimeout(commitTimeoutRef.current);
+    }
+    commitTimeoutRef.current = setTimeout(() => {
+      commitToHistory(getUndoableState());
+    }, 500);
+    return () => {
+      if (commitTimeoutRef.current) {
+        clearTimeout(commitTimeoutRef.current);
+      }
+    };
+  }, [imageScale, backgroundColor, brightness, contrast, invert, inkBleed, inkBleedAmount, inkBleedRoughness, preBlur, layers, palette, commitToHistory, getUndoableState]);
+  
+  // Undo handler
+  const handleUndo = useCallback(() => {
+    const prevState = undo();
+    if (prevState) {
+      setImageScale(prevState.imageScale);
+      setBackgroundColor(prevState.backgroundColor);
+      setBrightness(prevState.brightness);
+      setContrast(prevState.contrast);
+      setInvert(prevState.invert);
+      setInkBleed(prevState.inkBleed);
+      setInkBleedAmount(prevState.inkBleedAmount);
+      setInkBleedRoughness(prevState.inkBleedRoughness);
+      setPreBlur(prevState.preBlur);
+      setLayers(prevState.layers);
+      setPalette(prevState.palette);
+      showToast('Undo');
+    }
+  }, [undo]);
+  
+  // Redo handler
+  const handleRedo = useCallback(() => {
+    const nextState = redo();
+    if (nextState) {
+      setImageScale(nextState.imageScale);
+      setBackgroundColor(nextState.backgroundColor);
+      setBrightness(nextState.brightness);
+      setContrast(nextState.contrast);
+      setInvert(nextState.invert);
+      setInkBleed(nextState.inkBleed);
+      setInkBleedAmount(nextState.inkBleedAmount);
+      setInkBleedRoughness(nextState.inkBleedRoughness);
+      setPreBlur(nextState.preBlur);
+      setLayers(nextState.layers);
+      setPalette(nextState.palette);
+      showToast('Redo');
+    }
+  }, [redo]);
+  
+  // Clear session
+  const clearSession = useCallback(() => {
+    try {
+      localStorage.removeItem(SESSION_STORAGE_KEY);
+    } catch (err) {
+      console.warn('Failed to clear session:', err);
+    }
+  }, []);
   
   // Create preview image (downscaled for performance)
   useEffect(() => {
@@ -265,8 +460,8 @@ export default function HalftoneLab() {
       version: 1,
       exportedAt: new Date().toISOString(),
       presets: customPresets,
-      // Optionally include custom palette if it exists
-      ...(Object.keys(customPalette).length > 0 && { palette: customPalette })
+      // Include custom palette with presets
+      palette: palette
     };
     
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
@@ -319,8 +514,8 @@ export default function HalftoneLab() {
         
         // Also import palette if present
         if (data.palette && typeof data.palette === 'object' && Object.keys(data.palette).length > 0) {
-          const newPalette = { ...customPalette, ...data.palette };
-          setCustomPalette(newPalette);
+          const newPalette = { ...palette, ...data.palette };
+          setPalette(newPalette);
           saveCustomPalette(newPalette);
           showToast(`Imported ${validPresets} preset(s) and palette`);
         } else {
@@ -627,12 +822,14 @@ export default function HalftoneLab() {
     if (processingRef.current) return;
     
     processingRef.current = true;
+    setIsProcessing(true);
     
     // Use requestAnimationFrame for smooth rendering
     requestAnimationFrame(() => {
       // Skip if a newer update was requested
       if (updateId !== pendingUpdateRef.current) {
         processingRef.current = false;
+        setIsProcessing(false);
         return;
       }
       
@@ -640,6 +837,7 @@ export default function HalftoneLab() {
       const originalCanvas = originalCanvasRef.current;
       if (!originalCanvas) {
         processingRef.current = false;
+        setIsProcessing(false);
         return;
       }
       const originalCtx = originalCanvas.getContext('2d');
@@ -653,6 +851,7 @@ export default function HalftoneLab() {
       }
       
       processingRef.current = false;
+      setIsProcessing(false);
       
       // Check if there's a pending newer update
       if (updateId !== pendingUpdateRef.current) {
@@ -660,8 +859,10 @@ export default function HalftoneLab() {
         requestAnimationFrame(() => {
           if (!processingRef.current && canvasRef.current) {
             processingRef.current = true;
+            setIsProcessing(true);
             processImageCore(previewImage, canvasRef.current);
             processingRef.current = false;
+            setIsProcessing(false);
           }
         });
       }
@@ -872,6 +1073,35 @@ export default function HalftoneLab() {
     }
   }, [image, previewImage, debouncedImageScale, debouncedLayers, backgroundColor, getSourceImageData, activePalette]);
 
+  // Toggle layer visibility by index
+  const toggleLayerVisibility = useCallback((index) => {
+    if (index >= 0 && index < layers.length) {
+      const newLayers = [...layers];
+      newLayers[index] = { ...newLayers[index], visible: !newLayers[index].visible };
+      setLayers(newLayers);
+    }
+  }, [layers]);
+
+  // Keyboard shortcuts
+  const shortcuts = useMemo(() => createShortcuts({
+    onUndo: handleUndo,
+    onRedo: handleRedo,
+    onExport: () => image && exportPNG(),
+    onRandomize: () => image && randomizeLayers(),
+    onToggleComparison: () => image && setShowComparison(prev => !prev),
+    onZoomIn: () => setImageTransform(prev => ({ ...prev, scale: Math.min(8, prev.scale * 1.5) })),
+    onZoomOut: () => setImageTransform(prev => ({ ...prev, scale: Math.max(0.25, prev.scale / 1.5) })),
+    onResetZoom: () => setImageTransform(prev => ({ ...prev, scale: 1 })),
+    onSelectLayer: (index) => {
+      if (index < layers.length) {
+        setExpandedLayerIndex(index);
+      }
+    },
+    onToggleLayerVisibility: toggleLayerVisibility
+  }), [handleUndo, handleRedo, image, exportPNG, randomizeLayers, layers.length, toggleLayerVisibility]);
+  
+  useKeyboardShortcuts(shortcuts, { enabled: !showSaveModal });
+
   return (
     <DropZone onDrop={loadImageFile}>
       <div style={{ display: 'flex', height: '100vh', backgroundColor: '#000', color: '#fff', fontFamily: 'monospace' }}>
@@ -881,7 +1111,18 @@ export default function HalftoneLab() {
           {/* Header */}
           <div style={{ padding: '20px 16px', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h1 style={{ fontSize: '11px', letterSpacing: '0.2em', margin: 0, fontWeight: 400 }}>HALFTONE LAB</h1>
-            <IconButton onClick={resetAll} title="Reset all">↺</IconButton>
+            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+              <Tooltip text="Undo (⌘Z)">
+                <IconButton onClick={handleUndo} disabled={!canUndo} title="Undo">↶</IconButton>
+              </Tooltip>
+              <Tooltip text="Redo (⌘⇧Z)">
+                <IconButton onClick={handleRedo} disabled={!canRedo} title="Redo">↷</IconButton>
+              </Tooltip>
+              <div style={{ width: '8px' }} />
+              <Tooltip text="Reset all settings">
+                <IconButton onClick={resetAll} title="Reset all">↺</IconButton>
+              </Tooltip>
+            </div>
           </div>
           
           {/* Source Section */}
@@ -1044,10 +1285,10 @@ export default function HalftoneLab() {
             </div>
             
             <Button onClick={() => setPaperTexture(!paperTexture)} active={paperTexture}>
-              {paperTexture ? '● PAPER MODE ON' : '○ PAPER MODE'}
+              {paperTexture ? '● PAPER PREVIEW ON' : '○ PAPER PREVIEW'}
             </Button>
-            <p style={{ fontSize: '9px', color: '#444', margin: '8px 0 0 0' }}>
-              Adds warm paper tint and texture overlay
+            <p style={{ fontSize: '9px', color: '#666', margin: '8px 0 0 0' }}>
+              ⚠ Preview only — does not affect exports
             </p>
           </Section>
           
@@ -1066,11 +1307,16 @@ export default function HalftoneLab() {
                   onMoveDown={() => moveLayerDown(i)}
                   canRemove={layers.length > 1}
                   palette={activePalette}
+                  isExpanded={expandedLayerIndex === i}
+                  onToggleExpand={() => setExpandedLayerIndex(expandedLayerIndex === i ? -1 : i)}
                 />
               ))}
               {layers.length < 4 && (
                 <Button onClick={addLayer}>+ ADD LAYER</Button>
               )}
+              <p style={{ fontSize: '8px', color: '#444', margin: '12px 0 0 0', textAlign: 'center' }}>
+                Press 1-4 to select layer • Shift+1-4 to toggle visibility
+              </p>
           </Section>
           
           {/* Output Section */}
@@ -1188,6 +1434,37 @@ export default function HalftoneLab() {
               backgroundRepeat: 'repeat',
               zIndex: 20
             }} />
+          )}
+          
+          {/* Processing indicator */}
+          {isProcessing && image && (
+            <div style={{
+              position: 'absolute',
+              top: '16px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              backgroundColor: 'rgba(0,0,0,0.7)',
+              padding: '6px 12px',
+              fontSize: '9px',
+              color: '#888',
+              fontFamily: 'monospace',
+              letterSpacing: '0.1em',
+              zIndex: 30,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}>
+              <span style={{
+                display: 'inline-block',
+                width: '8px',
+                height: '8px',
+                border: '1px solid #555',
+                borderTopColor: '#fff',
+                borderRadius: '50%',
+                animation: 'spin 0.8s linear infinite'
+              }} />
+              PROCESSING
+            </div>
           )}
           
           {/* Top bar */}

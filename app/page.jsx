@@ -1,6 +1,11 @@
 import DomoDitherTool from './components/App';
+import ErrorBoundary from './components/ui/ErrorBoundary';
 
 export default function Home() {
-  return <DomoDitherTool />;
+  return (
+    <ErrorBoundary>
+      <DomoDitherTool />
+    </ErrorBoundary>
+  );
 }
 

@@ -9,8 +9,25 @@ import { CompactColorPicker } from './ColorPicker';
 import AlgorithmSelect from './AlgorithmSelect';
 import Slider from './Slider';
 
-export default function LayerPanel({ layer, index, totalLayers, onUpdate, onRemove, onDuplicate, onMoveUp, onMoveDown, canRemove, palette = null }) {
-  const [expanded, setExpanded] = useState(index === 0); // Only first layer expanded by default
+export default function LayerPanel({ 
+  layer, 
+  index, 
+  totalLayers, 
+  onUpdate, 
+  onRemove, 
+  onDuplicate, 
+  onMoveUp, 
+  onMoveDown, 
+  canRemove, 
+  palette = null,
+  isExpanded: externalExpanded,
+  onToggleExpand
+}) {
+  // Support both controlled (external) and uncontrolled (internal) expanded state
+  const [internalExpanded, setInternalExpanded] = useState(index === 0);
+  const expanded = externalExpanded !== undefined ? externalExpanded : internalExpanded;
+  const handleToggleExpand = onToggleExpand || (() => setInternalExpanded(!internalExpanded));
+  
   const [hovering, setHovering] = useState(false);
   const algoInfo = DITHER_ALGORITHMS[layer.ditherType];
   const isVisible = layer.visible !== false; // Default to true if not set
@@ -41,7 +58,7 @@ export default function LayerPanel({ layer, index, totalLayers, onUpdate, onRemo
               borderBottom: expanded ? '1px solid #222' : 'none',
               cursor: 'pointer'
             }}
-            onClick={() => setExpanded(!expanded)}
+            onClick={handleToggleExpand}
           >
             {/* Expand/collapse indicator */}
             <span style={{ 
