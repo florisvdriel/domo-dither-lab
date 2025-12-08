@@ -39,15 +39,17 @@ export function invertImageData(imageData) {
 }
 
 // Ink bleed effect - simulates capillary action via randomized dilation (fiber spread) - optimized
-// scaleFactor: scales the effect for high-resolution exports (e.g., 5.6x for 4500px vs 800px preview)
+// scaleFactor: used to scale the effect proportionally for high-resolution exports (default 1 for preview)
 export function applyInkBleed(imageData, amount, roughness = 0.5, scaleFactor = 1) {
   const w = imageData.width, h = imageData.height;
   const original = new Uint8ClampedArray(imageData.data); // Read-only copy
   const result = new Uint8ClampedArray(imageData.data);   // Output buffer
   const len = original.length;
   
-  // Number of dilation passes based on amount (1-3 passes at preview, scaled up for export)
-  // This ensures the bleed effect remains visually consistent at any resolution
+  // Scale neighbor distance for high-res exports (at least 1 pixel)
+  const neighborDist = Math.max(1, Math.round(scaleFactor));
+  
+  // Number of dilation passes based on amount (1-3 passes), scaled for resolution
   const passes = Math.max(1, Math.round(amount * 3 * scaleFactor));
   
   // Probability of a white pixel bleeding based on amount and roughness
@@ -58,13 +60,19 @@ export function applyInkBleed(imageData, amount, roughness = 0.5, scaleFactor = 
   const oneMinusBleedOpacity = 1 - bleedOpacity;
   const paperThreshold = 128; // Threshold in [0, 255] range
   
-  // Pre-calculate neighbor offsets
+  // Pre-calculate neighbor offsets (scaled by neighborDist for high-res)
   const neighborOffsets = [
-    -w * 4,  // Up
-    w * 4,   // Down
-    -4,      // Left
-    4        // Right
+    -w * 4 * neighborDist,  // Up
+    w * 4 * neighborDist,   // Down
+    -4 * neighborDist,      // Left
+    4 * neighborDist        // Right
   ];
+  
+  // Bounds for neighbor checks (scaled)
+  const minY = neighborDist;
+  const maxY = h - neighborDist;
+  const minX = neighborDist;
+  const maxX = w - neighborDist;
   
   // Run multiple dilation passes
   for (let pass = 0; pass < passes; pass++) {
@@ -85,12 +93,12 @@ export function applyInkBleed(imageData, amount, roughness = 0.5, scaleFactor = 
         const isPaper = gray >= paperThreshold;
         
         if (isPaper) {
-          // Check 4 neighbors (Up, Down, Left, Right) - optimized bounds checking
+          // Check 4 neighbors (Up, Down, Left, Right) - with scaled bounds checking
           let hasInkNeighbor = false;
           let inkR = 0, inkG = 0, inkB = 0;
           
           // Check up
-          if (y > 0) {
+          if (y >= minY) {
             const ni = i + neighborOffsets[0];
             const neighborGray = original[ni] * GRAY_R + original[ni + 1] * GRAY_G + original[ni + 2] * GRAY_B;
             if (neighborGray < paperThreshold) {
@@ -102,7 +110,7 @@ export function applyInkBleed(imageData, amount, roughness = 0.5, scaleFactor = 
           }
           
           // Check down
-          if (!hasInkNeighbor && y < h - 1) {
+          if (!hasInkNeighbor && y < maxY) {
             const ni = i + neighborOffsets[1];
             const neighborGray = original[ni] * GRAY_R + original[ni + 1] * GRAY_G + original[ni + 2] * GRAY_B;
             if (neighborGray < paperThreshold) {
@@ -114,7 +122,7 @@ export function applyInkBleed(imageData, amount, roughness = 0.5, scaleFactor = 
           }
           
           // Check left
-          if (!hasInkNeighbor && x > 0) {
+          if (!hasInkNeighbor && x >= minX) {
             const ni = i + neighborOffsets[2];
             const neighborGray = original[ni] * GRAY_R + original[ni + 1] * GRAY_G + original[ni + 2] * GRAY_B;
             if (neighborGray < paperThreshold) {
@@ -126,7 +134,7 @@ export function applyInkBleed(imageData, amount, roughness = 0.5, scaleFactor = 
           }
           
           // Check right
-          if (!hasInkNeighbor && x < w - 1) {
+          if (!hasInkNeighbor && x < maxX) {
             const ni = i + neighborOffsets[3];
             const neighborGray = original[ni] * GRAY_R + original[ni + 1] * GRAY_G + original[ni + 2] * GRAY_B;
             if (neighborGray < paperThreshold) {

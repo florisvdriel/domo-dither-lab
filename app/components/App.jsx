@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 
 // Constants
 import { DEFAULT_PALETTE } from '../constants/palette';
@@ -15,15 +15,15 @@ import { applyBrightnessContrast, invertImageData, applyInkBleed } from '../util
 import { loadCustomPresets, saveCustomPresets } from '../utils/storage';
 import { generateCombinedSVG, exportLayersAsZip, downloadSVG, estimateSVGSize } from '../utils/svgExport';
 import { useDitherWorker } from '../hooks/useDitherWorker';
-import { loadCustomPalette, saveCustomPalette, loadActivePaletteMode, saveActivePaletteMode } from '../utils/paletteStorage';
+import { loadCustomPalette, saveCustomPalette, hexToRgb } from '../utils/paletteStorage';
+import { generateNamedPalette } from '../utils/paletteGenerator';
 
 // UI Components
 import Toast from './ui/Toast';
-import PaletteEditor from './ui/PaletteEditor';
 import Tooltip from './ui/Tooltip';
 import Slider from './ui/Slider';
 import Button from './ui/Button';
-import ColorPicker from './ui/ColorPicker';
+import { SwatchWithPicker, ColorSwatch } from './ui/ColorPicker';
 import Section from './ui/Section';
 import IconButton from './ui/IconButton';
 import AlgorithmSelect from './ui/AlgorithmSelect';
@@ -67,10 +67,16 @@ export default function HalftoneLab() {
   const [customPresets, setCustomPresets] = useState(loadCustomPresets);
   const [showSaveModal, setShowSaveModal] = useState(false);
   
-  // Custom palette
-  const [customPalette, setCustomPalette] = useState(loadCustomPalette);
-  const [paletteMode, setPaletteMode] = useState(loadActivePaletteMode);
-  const [showPaletteEditor, setShowPaletteEditor] = useState(false);
+  // Palette - load custom if exists, otherwise use default (without black/white for editing)
+  const [palette, setPalette] = useState(() => {
+    const saved = loadCustomPalette();
+    if (Object.keys(saved).length > 0) {
+      return saved;
+    }
+    // Extract just the 4 color keys from DEFAULT_PALETTE (excluding white/black)
+    const { white, black, ...colors } = DEFAULT_PALETTE;
+    return colors;
+  });
   
   const [toastMessage, setToastMessage] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
@@ -86,20 +92,41 @@ export default function HalftoneLab() {
   // Web worker for off-main-thread dithering
   const { dither: workerDither, isAvailable: isWorkerAvailable } = useDitherWorker();
 
-  // Active palette based on mode
+  // Active palette includes editable colors + black/white for backgrounds
   const activePalette = useMemo(() => {
-    if (paletteMode === 'custom' && Object.keys(customPalette).length > 0) {
-      // Merge custom palette with black/white for backgrounds
       return {
-        ...customPalette,
+      ...palette,
         white: DEFAULT_PALETTE.white,
         black: DEFAULT_PALETTE.black
       };
-    }
-    return DEFAULT_PALETTE;
-  }, [paletteMode, customPalette]);
+  }, [palette]);
 
   const colorKeys = Object.keys(activePalette).filter(k => !['white', 'black'].includes(k));
+  
+  // Track previous palette keys to detect changes
+  const prevPaletteKeysRef = useRef(colorKeys);
+  
+  // Automatically remap layer colors when palette keys change
+  // Use useLayoutEffect to run synchronously before paint, preventing flicker
+  useLayoutEffect(() => {
+    const currentKeys = Object.keys(palette);
+    const prevKeys = prevPaletteKeysRef.current;
+    
+    // Only remap if the keys actually changed (not just the colors)
+    if (currentKeys.length > 0 && JSON.stringify(currentKeys) !== JSON.stringify(prevKeys)) {
+      setLayers(prevLayers => prevLayers.map((layer, index) => {
+        // If the current colorKey doesn't exist in new palette, remap to index-based key
+        if (!palette[layer.colorKey]) {
+          return {
+            ...layer,
+            colorKey: currentKeys[index % currentKeys.length]
+          };
+        }
+        return layer;
+      }));
+      prevPaletteKeysRef.current = currentKeys;
+    }
+  }, [palette]);
   
   // Debounce all processing-related state changes
   // Longer debounce for expensive operations
@@ -336,39 +363,53 @@ export default function HalftoneLab() {
   };
 
   // Palette functions
-  const handleSavePalette = (newPalette) => {
-    setCustomPalette(newPalette);
-    saveCustomPalette(newPalette);
-    setShowPaletteEditor(false);
-    
-    // If palette is empty, switch back to default
-    if (Object.keys(newPalette).length === 0) {
-      setPaletteMode('default');
-      saveActivePaletteMode('default');
-      showToast('Custom palette cleared');
-    } else {
-      // Auto-switch to custom mode when saving
-      if (paletteMode !== 'custom') {
-        setPaletteMode('custom');
-        saveActivePaletteMode('custom');
+  const updatePaletteColor = (colorKey, newHex) => {
+    const newPalette = {
+      ...palette,
+      [colorKey]: {
+        ...palette[colorKey],
+        hex: newHex.toUpperCase(),
+        rgb: hexToRgb(newHex)
       }
-      showToast('Palette saved');
-    }
+    };
+    setPalette(newPalette);
+    saveCustomPalette(newPalette);
   };
 
-  const togglePaletteMode = () => {
-    const newMode = paletteMode === 'default' ? 'custom' : 'default';
+  const randomizePalette = () => {
+    // Generate a random 4-color palette using tetradic harmony
+    const harmonyTypes = ['tetradic', 'analogous', 'triadic', 'splitComplementary'];
+    const randomHarmony = harmonyTypes[Math.floor(Math.random() * harmonyTypes.length)];
+    let newPalette = generateNamedPalette(randomHarmony);
     
-    // Don't allow switching to custom if no custom colors
-    if (newMode === 'custom' && Object.keys(customPalette).length === 0) {
-      showToast('Add custom colors first');
-      setShowPaletteEditor(true);
-      return;
+    // Ensure we have exactly 4 colors
+    const paletteEntries = Object.entries(newPalette);
+    if (paletteEntries.length > 4) {
+      newPalette = Object.fromEntries(paletteEntries.slice(0, 4));
+    } else if (paletteEntries.length < 4) {
+      // If less than 4, generate more colors
+      const additionalPalette = generateNamedPalette('tetradic');
+      const additionalEntries = Object.entries(additionalPalette);
+      let i = 0;
+      while (Object.keys(newPalette).length < 4 && i < additionalEntries.length) {
+        const [key, value] = additionalEntries[i];
+        if (!newPalette[key]) {
+          newPalette[key] = value;
+        }
+        i++;
+      }
     }
     
-    setPaletteMode(newMode);
-    saveActivePaletteMode(newMode);
-    showToast(`Using ${newMode === 'default' ? 'default' : 'custom'} palette`);
+    setPalette(newPalette);
+    saveCustomPalette(newPalette);
+    showToast('Palette randomized');
+  };
+
+  const resetPalette = () => {
+    const { white, black, ...colors } = DEFAULT_PALETTE;
+    setPalette(colors);
+    saveCustomPalette(colors);
+    showToast('Palette reset to default');
   };
 
   // Randomizer
@@ -544,14 +585,20 @@ export default function HalftoneLab() {
         }
         
         // Apply ink bleed to layer if enabled
+        // Pass scaleFactor so ink bleed scales proportionally for high-res exports
         if (inkBleed && debouncedInkBleedAmount > 0) {
-          ditheredData = applyInkBleed(ditheredData, debouncedInkBleedAmount, debouncedInkBleedRoughness);
+          ditheredData = applyInkBleed(ditheredData, debouncedInkBleedAmount, debouncedInkBleedRoughness, scaleFactor);
         }
         
-        const paletteColor = activePalette[layer.colorKey];
-        const r = paletteColor?.rgb?.[0] ?? 0;
-        const g = paletteColor?.rgb?.[1] ?? 0;
-        const b = paletteColor?.rgb?.[2] ?? 0;
+        // Get palette color with fallback to prevent black frames during transitions
+        let paletteColor = activePalette[layer.colorKey];
+        if (!paletteColor && colorKeys.length > 0) {
+          // Fallback to first available color if key not found
+          paletteColor = activePalette[colorKeys[0]];
+        }
+        const r = paletteColor?.rgb?.[0] ?? 128;
+        const g = paletteColor?.rgb?.[1] ?? 128;
+        const b = paletteColor?.rgb?.[2] ?? 128;
         const blendFn = blendModes[layer.blendMode] || blendModes.multiply;
         const layerOpacity = layer.opacity;
         const layerOffsetX = layer.offsetX;
@@ -797,7 +844,8 @@ export default function HalftoneLab() {
         sourceImageData,
         dimensions,
         backgroundColor,
-        { scaleFactor: 1 }
+        { scaleFactor: 1 },
+        activePalette
       );
       
       downloadSVG(svg, 'halftone-combined.svg');
@@ -809,7 +857,7 @@ export default function HalftoneLab() {
       console.error('SVG export error:', error);
       showToast('SVG export failed: ' + error.message);
     }
-  }, [image, previewImage, debouncedImageScale, debouncedLayers, backgroundColor, getSourceImageData]);
+  }, [image, previewImage, debouncedImageScale, debouncedLayers, backgroundColor, getSourceImageData, activePalette]);
   
   // Export separate SVG layers as ZIP
   const exportSVGLayers = useCallback(async () => {
@@ -842,7 +890,8 @@ export default function HalftoneLab() {
         sourceImageData,
         dimensions,
         backgroundColor,
-        { scaleFactor: 1 }
+        { scaleFactor: 1 },
+        activePalette
       );
       
       const visibleLayers = debouncedLayers.filter(l => l.visible !== false);
@@ -851,7 +900,7 @@ export default function HalftoneLab() {
       console.error('SVG layers export error:', error);
       showToast('SVG export failed: ' + error.message);
     }
-  }, [image, previewImage, debouncedImageScale, debouncedLayers, backgroundColor, getSourceImageData]);
+  }, [image, previewImage, debouncedImageScale, debouncedLayers, backgroundColor, getSourceImageData, activePalette]);
 
   return (
     <DropZone onDrop={loadImageFile}>
@@ -883,53 +932,36 @@ export default function HalftoneLab() {
           </Section>
           
           {/* Palette Section */}
-          <Section title="PALETTE" defaultOpen={false}>
-            <div style={{ display: 'flex', gap: '4px', marginBottom: '12px' }}>
-              <Button 
-                onClick={togglePaletteMode} 
-                active={paletteMode === 'default'} 
-                style={{ flex: 1, fontSize: '9px' }}
-              >
-                DEFAULT
-              </Button>
-              <Button 
-                onClick={togglePaletteMode} 
-                active={paletteMode === 'custom'} 
-                style={{ flex: 1, fontSize: '9px' }}
-              >
-                CUSTOM
-              </Button>
-            </div>
-            
-            {/* Palette preview */}
+          <Section title="PALETTE">
+            {/* Editable color swatches */}
             <div style={{ 
               display: 'flex', 
-              gap: '2px', 
+              gap: '8px', 
               marginBottom: '12px',
-              height: '24px'
+              alignItems: 'flex-start'
             }}>
               {colorKeys.map(key => (
-                <div 
+                <SwatchWithPicker
                   key={key} 
-                  style={{ 
-                    flex: 1, 
-                    backgroundColor: activePalette[key]?.hex || '#000',
-                    border: '1px solid #333'
-                  }} 
-                  title={activePalette[key]?.name || key}
+                  color={palette[key]?.hex || '#000000'}
+                  onChange={(newHex) => updatePaletteColor(key, newHex)}
+                  size={40}
                 />
               ))}
             </div>
             
-            <Button onClick={() => setShowPaletteEditor(true)} style={{ opacity: 0.7 }}>
-              {Object.keys(customPalette).length > 0 ? 'EDIT CUSTOM COLORS' : '+ ADD CUSTOM COLORS'}
+            {/* Palette actions */}
+            <div style={{ display: 'flex', gap: '4px' }}>
+              <Button onClick={randomizePalette} style={{ flex: 1 }}>
+                ↻ RANDOMIZE
             </Button>
+              <Button onClick={resetPalette} style={{ flex: 1, opacity: 0.7 }}>
+                RESET
+              </Button>
+            </div>
             
-            <p style={{ fontSize: '9px', color: '#444', margin: '8px 0 0 0' }}>
-              {paletteMode === 'default' 
-                ? 'Using default palette' 
-                : `Using ${Object.keys(customPalette).length} custom color${Object.keys(customPalette).length !== 1 ? 's' : ''}`
-              }
+            <p style={{ fontSize: '9px', color: '#444', margin: '8px 0 0 0', textAlign: 'center' }}>
+              Click swatches to edit colors
             </p>
           </Section>
           
@@ -1073,13 +1105,46 @@ export default function HalftoneLab() {
           
           {/* Output Section */}
           <Section title="OUTPUT">
-            <ColorPicker 
-              value={backgroundColor === '#ffffff' ? 'white' : backgroundColor === '#000000' ? 'black' : ''} 
-              onChange={(k) => setBackgroundColor(activePalette[k].hex)} 
-              label="BACKGROUND" 
-              showAll 
-              palette={activePalette}
+            <label style={{ 
+              display: 'block', 
+              color: '#666', 
+              fontSize: '10px', 
+              marginBottom: '8px', 
+              fontFamily: 'monospace',
+              letterSpacing: '0.05em'
+            }}>
+              BACKGROUND
+            </label>
+            <div style={{ 
+              display: 'flex', 
+              gap: '6px', 
+              marginBottom: '16px',
+              flexWrap: 'wrap'
+            }}>
+              {/* Palette colors */}
+              {colorKeys.map(key => (
+                <ColorSwatch
+                  key={key}
+                  color={palette[key]?.hex || '#000000'}
+                  selected={backgroundColor === palette[key]?.hex}
+                  onClick={() => setBackgroundColor(palette[key]?.hex)}
+                  size={28}
+                />
+              ))}
+              {/* Black and white */}
+              <ColorSwatch
+                color="#000000"
+                selected={backgroundColor === '#000000'}
+                onClick={() => setBackgroundColor('#000000')}
+                size={28}
+              />
+              <ColorSwatch
+                color="#FFFFFF"
+                selected={backgroundColor === '#FFFFFF' || backgroundColor === '#ffffff'}
+                onClick={() => setBackgroundColor('#FFFFFF')}
+                size={28}
             />
+            </div>
             
             <label style={{ display: 'block', color: '#666', fontSize: '10px', marginBottom: '8px', fontFamily: 'monospace' }}>RESOLUTION</label>
             <div style={{ display: 'flex', gap: '4px', marginBottom: '16px' }}>
@@ -1277,14 +1342,6 @@ export default function HalftoneLab() {
           <SavePresetModal 
             onSave={saveCustomPreset} 
             onCancel={() => setShowSaveModal(false)} 
-          />
-        )}
-        
-        {showPaletteEditor && (
-          <PaletteEditor 
-            palette={customPalette}
-            onSave={handleSavePalette}
-            onCancel={() => setShowPaletteEditor(false)}
           />
         )}
       </div>

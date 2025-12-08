@@ -3,37 +3,32 @@
  * Generates harmonious color palettes using color theory
  */
 
-// Color harmony types
+// Color harmony types - all generate exactly 4 colors
 export const HARMONY_TYPES = {
-  complementary: {
-    name: 'Complementary',
-    description: '2 colors, 180° apart',
-    colorCount: 2
-  },
-  analogous: {
-    name: 'Analogous',
-    description: '3-5 colors, adjacent on wheel',
-    colorCount: 4
-  },
-  triadic: {
-    name: 'Triadic',
-    description: '3 colors, 120° apart',
-    colorCount: 3
-  },
-  splitComplementary: {
-    name: 'Split-Complementary',
-    description: '3 colors, split complement',
-    colorCount: 3
-  },
   tetradic: {
     name: 'Tetradic',
     description: '4 colors, 90° apart',
     colorCount: 4
   },
+  analogous: {
+    name: 'Analogous',
+    description: '4 colors, adjacent on wheel',
+    colorCount: 4
+  },
+  triadic: {
+    name: 'Triadic+',
+    description: '3 colors + complement',
+    colorCount: 4
+  },
+  splitComplementary: {
+    name: 'Split-Comp+',
+    description: '3 split + accent',
+    colorCount: 4
+  },
   monochromatic: {
     name: 'Monochromatic',
-    description: 'Variations of one hue',
-    colorCount: 5
+    description: '4 shades of one hue',
+    colorCount: 4
   }
 };
 
@@ -131,11 +126,13 @@ function createColor(name, h, s, l) {
   };
 }
 
-// Generate complementary palette (2 colors, 180° apart)
+// Generate complementary palette expanded to 4 colors
 function generateComplementary(baseHue, baseSat, baseLight) {
   return [
     createColor('Primary', baseHue, baseSat, baseLight),
-    createColor('Complement', normalizeHue(baseHue + 180), baseSat, baseLight)
+    createColor('Primary Light', baseHue, baseSat - 10, baseLight + 15),
+    createColor('Complement', normalizeHue(baseHue + 180), baseSat, baseLight),
+    createColor('Complement Dark', normalizeHue(baseHue + 180), baseSat + 5, baseLight - 15)
   ];
 }
 
@@ -155,21 +152,23 @@ function generateAnalogous(baseHue, baseSat, baseLight, count = 4) {
   return colors;
 }
 
-// Generate triadic palette (3 colors, 120° apart)
+// Generate triadic palette expanded to 4 colors (3 + complement)
 function generateTriadic(baseHue, baseSat, baseLight) {
   return [
     createColor('Primary', baseHue, baseSat, baseLight),
     createColor('Secondary', normalizeHue(baseHue + 120), baseSat, baseLight),
-    createColor('Tertiary', normalizeHue(baseHue + 240), baseSat, baseLight)
+    createColor('Tertiary', normalizeHue(baseHue + 240), baseSat, baseLight),
+    createColor('Accent', normalizeHue(baseHue + 180), baseSat - 10, baseLight + 10)
   ];
 }
 
-// Generate split-complementary palette (3 colors)
+// Generate split-complementary palette expanded to 4 colors
 function generateSplitComplementary(baseHue, baseSat, baseLight) {
   return [
     createColor('Primary', baseHue, baseSat, baseLight),
     createColor('Split 1', normalizeHue(baseHue + 150), baseSat, baseLight),
-    createColor('Split 2', normalizeHue(baseHue + 210), baseSat, baseLight)
+    createColor('Split 2', normalizeHue(baseHue + 210), baseSat, baseLight),
+    createColor('Accent', normalizeHue(baseHue + 60), baseSat - 15, baseLight + 10)
   ];
 }
 
@@ -183,14 +182,15 @@ function generateTetradic(baseHue, baseSat, baseLight) {
   ];
 }
 
-// Generate monochromatic palette (variations of one hue)
-function generateMonochromatic(baseHue, baseSat, baseLight, count = 5) {
+// Generate monochromatic palette (4 variations of one hue)
+function generateMonochromatic(baseHue, baseSat, baseLight) {
   const colors = [];
-  const lightStep = 50 / (count - 1); // Spread across lightness range
-  const satVariation = 15;
+  const count = 4;
+  const lightStep = 45 / (count - 1); // Spread across lightness range
+  const satVariation = 10;
   
   for (let i = 0; i < count; i++) {
-    const light = 25 + (i * lightStep); // 25% to 75%
+    const light = 30 + (i * lightStep); // 30% to 75%
     const sat = baseSat + (Math.random() - 0.5) * satVariation;
     colors.push(createColor(`Shade ${i + 1}`, baseHue, Math.max(30, Math.min(90, sat)), light));
   }
@@ -215,11 +215,8 @@ export function generatePalette(harmonyType, baseHue = null, baseSat = null, bas
   let colors;
   
   switch (harmonyType) {
-    case 'complementary':
-      colors = generateComplementary(hue, sat, light);
-      break;
     case 'analogous':
-      colors = generateAnalogous(hue, sat, light);
+      colors = generateAnalogous(hue, sat, light, 4);
       break;
     case 'triadic':
       colors = generateTriadic(hue, sat, light);
@@ -234,7 +231,7 @@ export function generatePalette(harmonyType, baseHue = null, baseSat = null, bas
       colors = generateMonochromatic(hue, sat, light);
       break;
     default:
-      colors = generateTriadic(hue, sat, light);
+      colors = generateTetradic(hue, sat, light);
   }
   
   // Convert array to palette object

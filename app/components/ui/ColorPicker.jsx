@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { HexColorPicker, HexColorInput } from 'react-colorful';
 import { DEFAULT_PALETTE } from '../../constants/palette';
 import { hexToRgb } from '../../utils/paletteStorage';
@@ -18,9 +18,10 @@ function ColorSwatch({ color, selected, onClick, size = 28 }) {
         width: size,
         height: size,
         backgroundColor: color,
-        border: selected ? '2px solid #fff' : hovering ? '1px solid #555' : '1px solid #333',
+        border: selected ? '1px solid #fff' : hovering ? '1px solid #444' : '1px solid #222',
+        borderRadius: 0,
         cursor: 'pointer',
-        transition: 'border-color 0.1s ease',
+        transition: 'border-color 0.12s ease',
         padding: 0,
         outline: 'none'
       }}
@@ -305,30 +306,19 @@ export function CompactColorPicker({ value, onChange, palette = null }) {
   );
 }
 
-// Swatch with inline color picker popover
-export function SwatchWithPicker({ color, onChange, size = 32 }) {
+// Inline Color Picker with popover
+export function InlineColorPicker({ color, onChange, size = 36 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [localColor, setLocalColor] = useState(color);
-  const [popoverPosition, setPopoverPosition] = useState({ top: 0, left: 0 });
-  const popoverRef = useRef(null);
-  const swatchRef = useRef(null);
+  const [hovering, setHovering] = useState(false);
+  const containerRef = useRef(null);
   
-  // Sync local color when prop changes
-  useEffect(() => {
-    setLocalColor(color);
-  }, [color]);
-  
-  // Close on click outside
+  // Click outside handler
   useEffect(() => {
     if (!isOpen) return;
     
     const handleClickOutside = (e) => {
-      if (
-        popoverRef.current && 
-        !popoverRef.current.contains(e.target) &&
-        swatchRef.current &&
-        !swatchRef.current.contains(e.target)
-      ) {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
         setIsOpen(false);
       }
     };
@@ -337,97 +327,83 @@ export function SwatchWithPicker({ color, onChange, size = 32 }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen]);
   
+  // Sync local color when prop changes
+  useEffect(() => {
+    setLocalColor(color);
+  }, [color]);
+  
   const handleColorChange = useCallback((newColor) => {
     setLocalColor(newColor);
     onChange(newColor);
   }, [onChange]);
 
-  const handleSwatchClick = () => {
-    if (!isOpen && swatchRef.current) {
-      const rect = swatchRef.current.getBoundingClientRect();
-      setPopoverPosition({
-        top: rect.bottom + 8,
-        left: rect.left
-      });
-    }
-    setIsOpen(!isOpen);
-  };
-  
   return (
-    <div style={{ position: 'relative' }}>
+    <div ref={containerRef} style={{ position: 'relative' }}>
       <button
-        ref={swatchRef}
-        onClick={handleSwatchClick}
+        onClick={() => setIsOpen(!isOpen)}
+        onMouseEnter={() => setHovering(true)}
+        onMouseLeave={() => setHovering(false)}
         style={{
           width: size,
           height: size,
           backgroundColor: localColor,
-          border: '1px solid #333',
+          border: hovering ? '1px solid #444' : '1px solid #222',
+          borderRadius: 0,
           cursor: 'pointer',
           padding: 0,
-          outline: 'none',
-          transition: 'border-color 0.1s ease'
+          transition: 'border-color 0.15s ease'
         }}
-        onMouseEnter={(e) => e.target.style.borderColor = '#555'}
-        onMouseLeave={(e) => e.target.style.borderColor = '#333'}
       />
       
       {isOpen && (
-        <div
-          ref={popoverRef}
-          style={{
-            position: 'fixed',
-            top: popoverPosition.top,
-            left: popoverPosition.left,
-            zIndex: 9999,
-            backgroundColor: '#0a0a0a',
-            border: '1px solid #222',
-            padding: '16px',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.6)'
-          }}
-        >
+        <div style={{
+          position: 'absolute',
+          top: size + 8,
+          left: 0,
+          backgroundColor: '#0a0a0a',
+          border: '1px solid #222',
+          borderRadius: 0,
+          padding: '12px',
+          zIndex: 100,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.5)'
+        }}>
           <style>{`
-            .custom-color-picker .react-colorful {
+            .inline-color-picker .react-colorful {
               width: 180px !important;
             }
-            .custom-color-picker .react-colorful__saturation {
+            .inline-color-picker .react-colorful__saturation {
               border-radius: 0 !important;
+              height: 140px !important;
             }
-            .custom-color-picker .react-colorful__hue {
+            .inline-color-picker .react-colorful__hue {
               border-radius: 0 !important;
+              height: 14px !important;
             }
-            .custom-color-picker .react-colorful__saturation-pointer,
-            .custom-color-picker .react-colorful__hue-pointer {
-              border-radius: 50% !important;
+            .inline-color-picker .react-colorful__hue-pointer,
+            .inline-color-picker .react-colorful__saturation-pointer {
+              width: 16px !important;
+              height: 16px !important;
             }
           `}</style>
-          <div className="custom-color-picker">
+          <div className="inline-color-picker">
             <HexColorPicker 
               color={localColor} 
               onChange={handleColorChange}
             />
           </div>
-          
           <div style={{
             display: 'flex',
             alignItems: 'center',
+            marginTop: '10px',
             backgroundColor: '#000',
             border: '1px solid #333',
-            padding: '8px 10px',
-            marginTop: '12px'
+            borderRadius: 0,
+            padding: '6px 10px'
           }}>
-            <span style={{ 
-              color: '#666', 
-              fontSize: '10px', 
-              fontFamily: 'monospace',
-              marginRight: '6px'
-            }}>
-              #
-            </span>
+            <span style={{ color: '#666', fontSize: '10px', fontFamily: 'monospace', marginRight: '6px' }}>#</span>
             <HexColorInput 
               color={localColor} 
               onChange={handleColorChange}
-              prefixed={false}
               style={{
                 flex: 1,
                 backgroundColor: 'transparent',
@@ -437,7 +413,6 @@ export function SwatchWithPicker({ color, onChange, size = 32 }) {
                 fontFamily: 'monospace',
                 outline: 'none',
                 textTransform: 'uppercase',
-                letterSpacing: '0.05em',
                 width: '100%'
               }}
             />
