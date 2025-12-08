@@ -516,39 +516,26 @@ export default function HalftoneLab() {
   };
 
   // Core image processing function (viewport architecture)
-  // exportScale: additional multiplier for export resolution (1x, 2x, 4x) - used to scale analog effects proportionally
-  const processImageCore = useCallback((sourceImage, targetCanvas, isExport = false, exportScale = 1) => {
+  // Processes the preview image and renders to the target canvas
+  const processImageCore = useCallback((sourceImage, targetCanvas) => {
     if (!sourceImage || !targetCanvas) return;
     
     const ctx = targetCanvas.getContext('2d');
     const sourceCanvas = document.createElement('canvas');
     const sourceCtx = sourceCanvas.getContext('2d');
     
-    // For preview, use sourceImage dimensions (previewImage is already limited to PREVIEW_MAX_WIDTH)
-    // For export, use full image dimensions multiplied by export scale
-    const outputWidth = Math.round(sourceImage.width * exportScale);
-    const outputHeight = Math.round(sourceImage.height * exportScale);
+    // Output dimensions match source image (previewImage is already limited to PREVIEW_MAX_WIDTH)
+    const outputWidth = sourceImage.width;
+    const outputHeight = sourceImage.height;
     
     targetCanvas.width = outputWidth;
     targetCanvas.height = outputHeight;
     
-    // IMPORTANT: Source canvas stays at original resolution for crisp dithering
-    // Only the output and ink bleed effects are scaled up
-    // This prevents blurry halftone patterns from upscaled source images
-    const scaledWidth = isExport ? sourceImage.width : Math.round(sourceImage.width * debouncedImageScale);
-    const scaledHeight = isExport ? sourceImage.height : Math.round(sourceImage.height * debouncedImageScale);
+    // Apply image scale setting for processing resolution
+    const scaledWidth = Math.round(sourceImage.width * debouncedImageScale);
+    const scaledHeight = Math.round(sourceImage.height * debouncedImageScale);
     sourceCanvas.width = scaledWidth;
     sourceCanvas.height = scaledHeight;
-    
-    // Calculate scale factor to make dither patterns consistent between preview and export
-    // The scale parameter in UI is relative to preview size
-    // For preview: use scale as-is (scaleFactor = 1)
-    // For export: scale up proportionally to match export dimensions (but NOT including exportScale for dithering)
-    const previewWidth = image ? (image.width > PREVIEW_MAX_WIDTH ? PREVIEW_MAX_WIDTH : image.width) : sourceImage.width;
-    const scaleFactor = isExport ? (image ? image.width / previewWidth : 1) : 1;
-    
-    // Separate scale factor for ink bleed that includes export resolution
-    const inkBleedScaleFactor = scaleFactor * exportScale;
     
     sourceCtx.fillStyle = '#888888';
     sourceCtx.fillRect(0, 0, scaledWidth, scaledHeight);
@@ -592,21 +579,19 @@ export default function HalftoneLab() {
         
         if (!algo) continue;
         
-        // Scale the dither scale parameter to maintain consistent visual appearance
-        const scaledLayerScale = layer.scale * scaleFactor;
+        // Use layer scale directly for dithering
         let ditheredData;
         if (algoInfo.hasScale && algoInfo.hasAngle) {
-          ditheredData = algo(sourceData, layer.threshold, scaledLayerScale, layer.angle);
+          ditheredData = algo(sourceData, layer.threshold, layer.scale, layer.angle);
         } else if (algoInfo.hasScale) {
-          ditheredData = algo(sourceData, layer.threshold, scaledLayerScale);
+          ditheredData = algo(sourceData, layer.threshold, layer.scale);
         } else {
           ditheredData = algo(sourceData, layer.threshold);
         }
         
         // Apply ink bleed to layer if enabled
-        // Pass inkBleedScaleFactor so ink bleed scales proportionally for high-res exports
         if (inkBleed && debouncedInkBleedAmount > 0) {
-          ditheredData = applyInkBleed(ditheredData, debouncedInkBleedAmount, debouncedInkBleedRoughness, inkBleedScaleFactor);
+          ditheredData = applyInkBleed(ditheredData, debouncedInkBleedAmount, debouncedInkBleedRoughness, 1);
         }
         
         // Get palette color with fallback to prevent flicker during palette transitions
@@ -624,14 +609,11 @@ export default function HalftoneLab() {
         const b = paletteColor.rgb[2];
         const blendFn = blendModes[layer.blendMode] || blendModes.multiply;
         const layerOpacity = layer.opacity;
-        // Scale layer offsets for export (offsets are relative to preview size)
-        const layerOffsetX = layer.offsetX * (isExport ? exportScale : 1);
-        const layerOffsetY = layer.offsetY * (isExport ? exportScale : 1);
+        const layerOffsetX = layer.offsetX;
+        const layerOffsetY = layer.offsetY;
         const ditheredDataArray = ditheredData.data;
         
         // Map from output coordinates to dithered data coordinates
-        // For export: output is scaled up but dithered data is at original resolution
-        // scaleX/scaleY < 1 means we're upscaling (multiple output pixels per dithered pixel)
         const scaleX = scaledWidth / outputWidth;
         const scaleY = scaledHeight / outputHeight;
         
@@ -666,7 +648,7 @@ export default function HalftoneLab() {
       }
     
     ctx.putImageData(baseImageData, 0, 0);
-  }, [debouncedImageScale, debouncedBrightness, debouncedContrast, invert, debouncedPreBlur, debouncedLayers, backgroundColor, inkBleed, debouncedInkBleedAmount, debouncedInkBleedRoughness, image, activePalette]);
+  }, [debouncedImageScale, debouncedBrightness, debouncedContrast, invert, debouncedPreBlur, debouncedLayers, backgroundColor, inkBleed, debouncedInkBleedAmount, debouncedInkBleedRoughness, activePalette, colorKeys]);
 
   // Track pending updates to skip stale processing
   const pendingUpdateRef = useRef(0);
@@ -724,16 +706,23 @@ export default function HalftoneLab() {
   }, [previewImage, processImageCore]);
 
   const exportPNG = () => {
-    if (!image) return;
+    if (!image || !canvasRef.current) return;
     
     const scale = EXPORT_RESOLUTIONS[exportResolution].scale;
     
-    // Create export canvas at full resolution * export scale
-    // Pass exportScale to processImageCore so analog effects (ink bleed, etc.) scale proportionally
-    const exportCanvas = document.createElement('canvas');
-    processImageCore(image, exportCanvas, true, scale);
+    // Get the preview canvas - this is exactly what the user sees
+    const previewCanvas = canvasRef.current;
     
-    // Canvas is already at the correct resolution, no post-processing upscale needed
+    // Create export canvas and scale up the preview with nearest-neighbor (crisp pixels)
+    const exportCanvas = document.createElement('canvas');
+    exportCanvas.width = previewCanvas.width * scale;
+    exportCanvas.height = previewCanvas.height * scale;
+    const ctx = exportCanvas.getContext('2d');
+    
+    // Disable image smoothing for crisp pixel scaling (nearest-neighbor)
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(previewCanvas, 0, 0, exportCanvas.width, exportCanvas.height);
+    
     const dataUrl = exportCanvas.toDataURL('image/png');
     
     const byteString = atob(dataUrl.split(',')[1]);
