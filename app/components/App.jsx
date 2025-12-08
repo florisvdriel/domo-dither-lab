@@ -291,7 +291,7 @@ export default function HalftoneLab() {
       exportedAt: new Date().toISOString(),
       presets: customPresets,
       // Optionally include custom palette if it exists
-      ...(Object.keys(customPalette).length > 0 && { palette: customPalette })
+      ...(Object.keys(palette).length > 0 && { palette: palette })
     };
     
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
@@ -344,8 +344,8 @@ export default function HalftoneLab() {
         
         // Also import palette if present
         if (data.palette && typeof data.palette === 'object' && Object.keys(data.palette).length > 0) {
-          const newPalette = { ...customPalette, ...data.palette };
-          setCustomPalette(newPalette);
+          const newPalette = { ...palette, ...data.palette };
+          setPalette(newPalette);
           saveCustomPalette(newPalette);
           showToast(`Imported ${validPresets} preset(s) and palette`);
         } else {

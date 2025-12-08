@@ -1,6 +1,6 @@
-import DomoDitherTool from './components/App';
+import HalftoneLab from './components/App';
 
 export default function Home() {
-  return <DomoDitherTool />;
+  return <HalftoneLab />;
 }
 

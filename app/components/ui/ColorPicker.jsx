@@ -425,3 +425,6 @@ export function InlineColorPicker({ color, onChange, size = 36 }) {
 
 // Export ColorSwatch for use elsewhere
 export { ColorSwatch };
+
+// Alias for InlineColorPicker - used in palette section
+export { InlineColorPicker as SwatchWithPicker };
