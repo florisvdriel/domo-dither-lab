@@ -39,7 +39,7 @@ export function generateLayerSVG(layer, sourceImageData, dimensions, options = {
     }
   } else if (algoInfo?.category === 'ordered') {
     elements = generateBayerPattern(layer, sourceImageData, dimensions, scaleFactor);
-  } else if (algoInfo?.category === 'error') {
+  } else if (algoInfo?.category === 'diffusion') {
     elements = generateErrorDiffusionPaths(layer, sourceImageData, dimensions, scaleFactor);
   } else if (layer.ditherType === 'noise') {
     elements = generateNoiseStipple(layer, sourceImageData, dimensions, scaleFactor);

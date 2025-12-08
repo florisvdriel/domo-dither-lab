@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { HexColorPicker, HexColorInput } from 'react-colorful';
 import { DEFAULT_PALETTE } from '../../constants/palette';
 import { hexToRgb } from '../../utils/paletteStorage';
@@ -18,14 +18,11 @@ function ColorSwatch({ color, selected, onClick, size = 28 }) {
         width: size,
         height: size,
         backgroundColor: color,
-        border: selected ? '2px solid #fff' : '2px solid transparent',
-        borderRadius: '4px',
+        border: selected ? '2px solid #fff' : hovering ? '1px solid #555' : '1px solid #333',
         cursor: 'pointer',
-        transform: hovering && !selected ? 'scale(1.1)' : 'scale(1)',
-        transition: 'all 0.12s ease',
+        transition: 'border-color 0.1s ease',
         padding: 0,
-        outline: 'none',
-        boxShadow: selected ? '0 0 0 1px rgba(255,255,255,0.3)' : 'none'
+        outline: 'none'
       }}
     />
   );
@@ -304,6 +301,149 @@ export function CompactColorPicker({ value, onChange, palette = null }) {
           size={24}
         />
       ))}
+    </div>
+  );
+}
+
+// Swatch with inline color picker popover
+export function SwatchWithPicker({ color, onChange, size = 32 }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [localColor, setLocalColor] = useState(color);
+  const [popoverPosition, setPopoverPosition] = useState({ top: 0, left: 0 });
+  const popoverRef = useRef(null);
+  const swatchRef = useRef(null);
+  
+  // Sync local color when prop changes
+  useEffect(() => {
+    setLocalColor(color);
+  }, [color]);
+  
+  // Close on click outside
+  useEffect(() => {
+    if (!isOpen) return;
+    
+    const handleClickOutside = (e) => {
+      if (
+        popoverRef.current && 
+        !popoverRef.current.contains(e.target) &&
+        swatchRef.current &&
+        !swatchRef.current.contains(e.target)
+      ) {
+        setIsOpen(false);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen]);
+  
+  const handleColorChange = useCallback((newColor) => {
+    setLocalColor(newColor);
+    onChange(newColor);
+  }, [onChange]);
+
+  const handleSwatchClick = () => {
+    if (!isOpen && swatchRef.current) {
+      const rect = swatchRef.current.getBoundingClientRect();
+      setPopoverPosition({
+        top: rect.bottom + 8,
+        left: rect.left
+      });
+    }
+    setIsOpen(!isOpen);
+  };
+  
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        ref={swatchRef}
+        onClick={handleSwatchClick}
+        style={{
+          width: size,
+          height: size,
+          backgroundColor: localColor,
+          border: '1px solid #333',
+          cursor: 'pointer',
+          padding: 0,
+          outline: 'none',
+          transition: 'border-color 0.1s ease'
+        }}
+        onMouseEnter={(e) => e.target.style.borderColor = '#555'}
+        onMouseLeave={(e) => e.target.style.borderColor = '#333'}
+      />
+      
+      {isOpen && (
+        <div
+          ref={popoverRef}
+          style={{
+            position: 'fixed',
+            top: popoverPosition.top,
+            left: popoverPosition.left,
+            zIndex: 9999,
+            backgroundColor: '#0a0a0a',
+            border: '1px solid #222',
+            padding: '16px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.6)'
+          }}
+        >
+          <style>{`
+            .custom-color-picker .react-colorful {
+              width: 180px !important;
+            }
+            .custom-color-picker .react-colorful__saturation {
+              border-radius: 0 !important;
+            }
+            .custom-color-picker .react-colorful__hue {
+              border-radius: 0 !important;
+            }
+            .custom-color-picker .react-colorful__saturation-pointer,
+            .custom-color-picker .react-colorful__hue-pointer {
+              border-radius: 50% !important;
+            }
+          `}</style>
+          <div className="custom-color-picker">
+            <HexColorPicker 
+              color={localColor} 
+              onChange={handleColorChange}
+            />
+          </div>
+          
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            backgroundColor: '#000',
+            border: '1px solid #333',
+            padding: '8px 10px',
+            marginTop: '12px'
+          }}>
+            <span style={{ 
+              color: '#666', 
+              fontSize: '10px', 
+              fontFamily: 'monospace',
+              marginRight: '6px'
+            }}>
+              #
+            </span>
+            <HexColorInput 
+              color={localColor} 
+              onChange={handleColorChange}
+              prefixed={false}
+              style={{
+                flex: 1,
+                backgroundColor: 'transparent',
+                border: 'none',
+                color: '#fff',
+                fontSize: '11px',
+                fontFamily: 'monospace',
+                outline: 'none',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                width: '100%'
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

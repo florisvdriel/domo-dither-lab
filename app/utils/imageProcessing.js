@@ -39,14 +39,16 @@ export function invertImageData(imageData) {
 }
 
 // Ink bleed effect - simulates capillary action via randomized dilation (fiber spread) - optimized
-export function applyInkBleed(imageData, amount, roughness = 0.5) {
+// scaleFactor: scales the effect for high-resolution exports (e.g., 5.6x for 4500px vs 800px preview)
+export function applyInkBleed(imageData, amount, roughness = 0.5, scaleFactor = 1) {
   const w = imageData.width, h = imageData.height;
   const original = new Uint8ClampedArray(imageData.data); // Read-only copy
   const result = new Uint8ClampedArray(imageData.data);   // Output buffer
   const len = original.length;
   
-  // Number of dilation passes based on amount (1-3 passes)
-  const passes = Math.max(1, Math.round(amount * 3));
+  // Number of dilation passes based on amount (1-3 passes at preview, scaled up for export)
+  // This ensures the bleed effect remains visually consistent at any resolution
+  const passes = Math.max(1, Math.round(amount * 3 * scaleFactor));
   
   // Probability of a white pixel bleeding based on amount and roughness
   // Higher roughness = more irregular/random spread
