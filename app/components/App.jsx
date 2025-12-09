@@ -69,7 +69,7 @@ export default function HalftoneLab() {
     if (Object.keys(saved).length > 0) {
       return saved;
     }
-    // Extract just the 4 color keys from DEFAULT_PALETTE (excluding white/black)
+    // Extract color keys from DEFAULT_PALETTE (excluding white/black)
     const { white, black, ...colors } = DEFAULT_PALETTE;
     return colors;
   });
@@ -218,7 +218,7 @@ export default function HalftoneLab() {
   });
 
   const addLayer = () => {
-    if (layers.length < 4) setLayers([...layers, createDefaultLayer()]);
+    if (layers.length < 10) setLayers([...layers, createDefaultLayer()]);
   };
 
   const updateLayer = (index, newLayer) => {
@@ -242,7 +242,7 @@ export default function HalftoneLab() {
   };
   
   const duplicateLayer = (index) => {
-    if (layers.length >= 4) return;
+    if (layers.length >= 10) return;
     const newLayer = { ...layers[index], id: Date.now() };
     const newLayers = [...layers];
     newLayers.splice(index + 1, 0, newLayer);
@@ -412,21 +412,30 @@ export default function HalftoneLab() {
   };
 
   const randomizePalette = () => {
-    // Generate a random 4-color palette using tetradic harmony
+    // Generate a random 8-color palette by combining two harmony types
     const harmonyTypes = ['tetradic', 'analogous', 'triadic', 'splitComplementary'];
-    const randomHarmony = harmonyTypes[Math.floor(Math.random() * harmonyTypes.length)];
-    let newPalette = generateNamedPalette(randomHarmony);
+    const randomHarmony1 = harmonyTypes[Math.floor(Math.random() * harmonyTypes.length)];
+    const randomHarmony2 = harmonyTypes[Math.floor(Math.random() * harmonyTypes.length)];
+    let newPalette = generateNamedPalette(randomHarmony1);
+    const secondPalette = generateNamedPalette(randomHarmony2);
     
-    // Ensure we have exactly 4 colors
+    // Merge palettes to get more colors
+    Object.entries(secondPalette).forEach(([key, value]) => {
+      if (!newPalette[key]) {
+        newPalette[key] = value;
+      }
+    });
+    
+    // Ensure we have exactly 8 colors
     const paletteEntries = Object.entries(newPalette);
-    if (paletteEntries.length > 4) {
-      newPalette = Object.fromEntries(paletteEntries.slice(0, 4));
-    } else if (paletteEntries.length < 4) {
-      // If less than 4, generate more colors
+    if (paletteEntries.length > 8) {
+      newPalette = Object.fromEntries(paletteEntries.slice(0, 8));
+    } else if (paletteEntries.length < 8) {
+      // If less than 8, generate more colors
       const additionalPalette = generateNamedPalette('tetradic');
       const additionalEntries = Object.entries(additionalPalette);
       let i = 0;
-      while (Object.keys(newPalette).length < 4 && i < additionalEntries.length) {
+      while (Object.keys(newPalette).length < 8 && i < additionalEntries.length) {
         const [key, value] = additionalEntries[i];
         if (!newPalette[key]) {
           newPalette[key] = value;

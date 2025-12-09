@@ -1,4 +1,4 @@
-import { getGray, BAYER_2x2, BAYER_4x4, BAYER_8x8, GRAY_R, GRAY_G, GRAY_B, seededRandom } from './helpers';
+import { getGray, BAYER_2x2, BAYER_4x4, BAYER_8x8, BLUE_NOISE_64, GRAY_R, GRAY_G, GRAY_B, seededRandom, generateHilbertPath } from './helpers';
 
 // Dithering Algorithms
 export const ditherAlgorithms = {
@@ -428,6 +428,436 @@ export const ditherAlgorithms = {
         const adjustedThreshold = decisionThreshold + (noise - 0.5) * noiseAmount;
         const result = gray > adjustedThreshold ? 255 : 0;
         data[i] = data[i+1] = data[i+2] = result;
+      }
+    }
+    return new ImageData(data, w, h);
+  },
+
+  // Blue noise dithering using precomputed 64x64 blue noise texture
+  blueNoise: (imageData, threshold, scale = 1) => {
+    const data = new Uint8ClampedArray(imageData.data);
+    const w = imageData.width, h = imageData.height;
+    const pixelScale = Math.max(1, Math.floor(scale));
+    const thresholdOffset = (threshold - 0.5) * 0.8;
+    const invPixelScale = 1 / pixelScale;
+    
+    for (let y = 0; y < h; y++) {
+      const yw = y * w;
+      const my = Math.floor(y * invPixelScale) % 64;
+      for (let x = 0; x < w; x++) {
+        const i = (yw + x) * 4;
+        const gray = getGray(data, i);
+        const mx = Math.floor(x * invPixelScale) % 64;
+        const blueNoiseValue = BLUE_NOISE_64[my][mx];
+        const result = gray > (blueNoiseValue + thresholdOffset) ? 255 : 0;
+        data[i] = data[i+1] = data[i+2] = result;
+      }
+    }
+    return new ImageData(data, w, h);
+  },
+
+  // Stucki error diffusion (sharper than Floyd-Steinberg, 42-divisor kernel)
+  stucki: (imageData, threshold, scale = 1) => {
+    const data = new Uint8ClampedArray(imageData.data);
+    const w = imageData.width, h = imageData.height;
+    const pixelScale = Math.max(1, Math.floor(scale));
+    const thresh = 80 + threshold * 100;
+    const invPixelScale = 1 / pixelScale;
+    
+    const sw = Math.ceil(w * invPixelScale);
+    const sh = Math.ceil(h * invPixelScale);
+    const gray = new Float32Array(sw * sh);
+    
+    // Sample to scaled resolution
+    for (let sy = 0; sy < sh; sy++) {
+      const syStart = sy * pixelScale;
+      const syEnd = Math.min(syStart + pixelScale, h);
+      const syw = sy * sw;
+      for (let sx = 0; sx < sw; sx++) {
+        const sxStart = sx * pixelScale;
+        const sxEnd = Math.min(sxStart + pixelScale, w);
+        let sum = 0, count = 0;
+        for (let dy = syStart; dy < syEnd; dy++) {
+          const dyw = dy * w;
+          for (let dx = sxStart; dx < sxEnd; dx++) {
+            const idx = (dyw + dx) * 4;
+            sum += data[idx] * GRAY_R + data[idx+1] * GRAY_G + data[idx+2] * GRAY_B;
+            count++;
+          }
+        }
+        gray[syw + sx] = count > 0 ? sum / count : 0;
+      }
+    }
+    
+    // Stucki kernel (÷42):
+    //     *  8  4
+    // 2  4  8  4  2
+    // 1  2  4  2  1
+    const div = 1 / 42;
+    
+    for (let y = 0; y < sh; y++) {
+      const yw = y * sw;
+      for (let x = 0; x < sw; x++) {
+        const i = yw + x;
+        const oldPixel = gray[i];
+        const newPixel = oldPixel > thresh ? 255 : 0;
+        gray[i] = newPixel;
+        const error = (oldPixel - newPixel) * div;
+        
+        // Row 0
+        if (x + 1 < sw) gray[i + 1] += error * 8;
+        if (x + 2 < sw) gray[i + 2] += error * 4;
+        // Row 1
+        if (y + 1 < sh) {
+          const row1 = i + sw;
+          if (x > 1) gray[row1 - 2] += error * 2;
+          if (x > 0) gray[row1 - 1] += error * 4;
+          gray[row1] += error * 8;
+          if (x + 1 < sw) gray[row1 + 1] += error * 4;
+          if (x + 2 < sw) gray[row1 + 2] += error * 2;
+        }
+        // Row 2
+        if (y + 2 < sh) {
+          const row2 = i + sw * 2;
+          if (x > 1) gray[row2 - 2] += error * 1;
+          if (x > 0) gray[row2 - 1] += error * 2;
+          gray[row2] += error * 4;
+          if (x + 1 < sw) gray[row2 + 1] += error * 2;
+          if (x + 2 < sw) gray[row2 + 2] += error * 1;
+        }
+      }
+    }
+    
+    // Map back to full resolution
+    for (let y = 0; y < h; y++) {
+      const sy = Math.floor(y * invPixelScale);
+      const yw = y * w;
+      for (let x = 0; x < w; x++) {
+        const sx = Math.floor(x * invPixelScale);
+        const val = gray[sy * sw + sx] > 127 ? 255 : 0;
+        const idx = (yw + x) * 4;
+        data[idx] = data[idx+1] = data[idx+2] = val;
+      }
+    }
+    return new ImageData(data, w, h);
+  },
+
+  // Sierra error diffusion (32-divisor kernel)
+  sierra: (imageData, threshold, scale = 1) => {
+    const data = new Uint8ClampedArray(imageData.data);
+    const w = imageData.width, h = imageData.height;
+    const pixelScale = Math.max(1, Math.floor(scale));
+    const thresh = 80 + threshold * 100;
+    const invPixelScale = 1 / pixelScale;
+    
+    const sw = Math.ceil(w * invPixelScale);
+    const sh = Math.ceil(h * invPixelScale);
+    const gray = new Float32Array(sw * sh);
+    
+    // Sample to scaled resolution
+    for (let sy = 0; sy < sh; sy++) {
+      const syStart = sy * pixelScale;
+      const syEnd = Math.min(syStart + pixelScale, h);
+      const syw = sy * sw;
+      for (let sx = 0; sx < sw; sx++) {
+        const sxStart = sx * pixelScale;
+        const sxEnd = Math.min(sxStart + pixelScale, w);
+        let sum = 0, count = 0;
+        for (let dy = syStart; dy < syEnd; dy++) {
+          const dyw = dy * w;
+          for (let dx = sxStart; dx < sxEnd; dx++) {
+            const idx = (dyw + dx) * 4;
+            sum += data[idx] * GRAY_R + data[idx+1] * GRAY_G + data[idx+2] * GRAY_B;
+            count++;
+          }
+        }
+        gray[syw + sx] = count > 0 ? sum / count : 0;
+      }
+    }
+    
+    // Sierra kernel (÷32):
+    //     *  5  3
+    // 2  4  5  4  2
+    //    2  3  2
+    const div = 1 / 32;
+    
+    for (let y = 0; y < sh; y++) {
+      const yw = y * sw;
+      for (let x = 0; x < sw; x++) {
+        const i = yw + x;
+        const oldPixel = gray[i];
+        const newPixel = oldPixel > thresh ? 255 : 0;
+        gray[i] = newPixel;
+        const error = (oldPixel - newPixel) * div;
+        
+        // Row 0
+        if (x + 1 < sw) gray[i + 1] += error * 5;
+        if (x + 2 < sw) gray[i + 2] += error * 3;
+        // Row 1
+        if (y + 1 < sh) {
+          const row1 = i + sw;
+          if (x > 1) gray[row1 - 2] += error * 2;
+          if (x > 0) gray[row1 - 1] += error * 4;
+          gray[row1] += error * 5;
+          if (x + 1 < sw) gray[row1 + 1] += error * 4;
+          if (x + 2 < sw) gray[row1 + 2] += error * 2;
+        }
+        // Row 2
+        if (y + 2 < sh) {
+          const row2 = i + sw * 2;
+          if (x > 0) gray[row2 - 1] += error * 2;
+          gray[row2] += error * 3;
+          if (x + 1 < sw) gray[row2 + 1] += error * 2;
+        }
+      }
+    }
+    
+    // Map back to full resolution
+    for (let y = 0; y < h; y++) {
+      const sy = Math.floor(y * invPixelScale);
+      const yw = y * w;
+      for (let x = 0; x < w; x++) {
+        const sx = Math.floor(x * invPixelScale);
+        const val = gray[sy * sw + sx] > 127 ? 255 : 0;
+        const idx = (yw + x) * 4;
+        data[idx] = data[idx+1] = data[idx+2] = val;
+      }
+    }
+    return new ImageData(data, w, h);
+  },
+
+  // Sierra Two-Row error diffusion (16-divisor kernel)
+  sierraTwoRow: (imageData, threshold, scale = 1) => {
+    const data = new Uint8ClampedArray(imageData.data);
+    const w = imageData.width, h = imageData.height;
+    const pixelScale = Math.max(1, Math.floor(scale));
+    const thresh = 80 + threshold * 100;
+    const invPixelScale = 1 / pixelScale;
+    
+    const sw = Math.ceil(w * invPixelScale);
+    const sh = Math.ceil(h * invPixelScale);
+    const gray = new Float32Array(sw * sh);
+    
+    // Sample to scaled resolution
+    for (let sy = 0; sy < sh; sy++) {
+      const syStart = sy * pixelScale;
+      const syEnd = Math.min(syStart + pixelScale, h);
+      const syw = sy * sw;
+      for (let sx = 0; sx < sw; sx++) {
+        const sxStart = sx * pixelScale;
+        const sxEnd = Math.min(sxStart + pixelScale, w);
+        let sum = 0, count = 0;
+        for (let dy = syStart; dy < syEnd; dy++) {
+          const dyw = dy * w;
+          for (let dx = sxStart; dx < sxEnd; dx++) {
+            const idx = (dyw + dx) * 4;
+            sum += data[idx] * GRAY_R + data[idx+1] * GRAY_G + data[idx+2] * GRAY_B;
+            count++;
+          }
+        }
+        gray[syw + sx] = count > 0 ? sum / count : 0;
+      }
+    }
+    
+    // Sierra Two-Row kernel (÷16):
+    //     *  4  3
+    // 1  2  3  2  1
+    const div = 1 / 16;
+    
+    for (let y = 0; y < sh; y++) {
+      const yw = y * sw;
+      for (let x = 0; x < sw; x++) {
+        const i = yw + x;
+        const oldPixel = gray[i];
+        const newPixel = oldPixel > thresh ? 255 : 0;
+        gray[i] = newPixel;
+        const error = (oldPixel - newPixel) * div;
+        
+        // Row 0
+        if (x + 1 < sw) gray[i + 1] += error * 4;
+        if (x + 2 < sw) gray[i + 2] += error * 3;
+        // Row 1
+        if (y + 1 < sh) {
+          const row1 = i + sw;
+          if (x > 1) gray[row1 - 2] += error * 1;
+          if (x > 0) gray[row1 - 1] += error * 2;
+          gray[row1] += error * 3;
+          if (x + 1 < sw) gray[row1 + 1] += error * 2;
+          if (x + 2 < sw) gray[row1 + 2] += error * 1;
+        }
+      }
+    }
+    
+    // Map back to full resolution
+    for (let y = 0; y < h; y++) {
+      const sy = Math.floor(y * invPixelScale);
+      const yw = y * w;
+      for (let x = 0; x < w; x++) {
+        const sx = Math.floor(x * invPixelScale);
+        const val = gray[sy * sw + sx] > 127 ? 255 : 0;
+        const idx = (yw + x) * 4;
+        data[idx] = data[idx+1] = data[idx+2] = val;
+      }
+    }
+    return new ImageData(data, w, h);
+  },
+
+  // Sierra Lite error diffusion (4-divisor kernel)
+  sierraLite: (imageData, threshold, scale = 1) => {
+    const data = new Uint8ClampedArray(imageData.data);
+    const w = imageData.width, h = imageData.height;
+    const pixelScale = Math.max(1, Math.floor(scale));
+    const thresh = 80 + threshold * 100;
+    const invPixelScale = 1 / pixelScale;
+    
+    const sw = Math.ceil(w * invPixelScale);
+    const sh = Math.ceil(h * invPixelScale);
+    const gray = new Float32Array(sw * sh);
+    
+    // Sample to scaled resolution
+    for (let sy = 0; sy < sh; sy++) {
+      const syStart = sy * pixelScale;
+      const syEnd = Math.min(syStart + pixelScale, h);
+      const syw = sy * sw;
+      for (let sx = 0; sx < sw; sx++) {
+        const sxStart = sx * pixelScale;
+        const sxEnd = Math.min(sxStart + pixelScale, w);
+        let sum = 0, count = 0;
+        for (let dy = syStart; dy < syEnd; dy++) {
+          const dyw = dy * w;
+          for (let dx = sxStart; dx < sxEnd; dx++) {
+            const idx = (dyw + dx) * 4;
+            sum += data[idx] * GRAY_R + data[idx+1] * GRAY_G + data[idx+2] * GRAY_B;
+            count++;
+          }
+        }
+        gray[syw + sx] = count > 0 ? sum / count : 0;
+      }
+    }
+    
+    // Sierra Lite kernel (÷4):
+    //     *  2
+    // 1  1
+    const div = 1 / 4;
+    
+    for (let y = 0; y < sh; y++) {
+      const yw = y * sw;
+      for (let x = 0; x < sw; x++) {
+        const i = yw + x;
+        const oldPixel = gray[i];
+        const newPixel = oldPixel > thresh ? 255 : 0;
+        gray[i] = newPixel;
+        const error = (oldPixel - newPixel) * div;
+        
+        // Row 0
+        if (x + 1 < sw) gray[i + 1] += error * 2;
+        // Row 1
+        if (y + 1 < sh) {
+          const row1 = i + sw;
+          if (x > 0) gray[row1 - 1] += error * 1;
+          gray[row1] += error * 1;
+        }
+      }
+    }
+    
+    // Map back to full resolution
+    for (let y = 0; y < h; y++) {
+      const sy = Math.floor(y * invPixelScale);
+      const yw = y * w;
+      for (let x = 0; x < w; x++) {
+        const sx = Math.floor(x * invPixelScale);
+        const val = gray[sy * sw + sx] > 127 ? 255 : 0;
+        const idx = (yw + x) * 4;
+        data[idx] = data[idx+1] = data[idx+2] = val;
+      }
+    }
+    return new ImageData(data, w, h);
+  },
+
+  // Riemersma dithering using Hilbert curve
+  riemersma: (imageData, threshold, scale = 1) => {
+    const data = new Uint8ClampedArray(imageData.data);
+    const w = imageData.width, h = imageData.height;
+    const pixelScale = Math.max(1, Math.floor(scale));
+    const thresh = 80 + threshold * 100;
+    const invPixelScale = 1 / pixelScale;
+    
+    const sw = Math.ceil(w * invPixelScale);
+    const sh = Math.ceil(h * invPixelScale);
+    const gray = new Float32Array(sw * sh);
+    const output = new Uint8Array(sw * sh);
+    
+    // Sample to scaled resolution
+    for (let sy = 0; sy < sh; sy++) {
+      const syStart = sy * pixelScale;
+      const syEnd = Math.min(syStart + pixelScale, h);
+      const syw = sy * sw;
+      for (let sx = 0; sx < sw; sx++) {
+        const sxStart = sx * pixelScale;
+        const sxEnd = Math.min(sxStart + pixelScale, w);
+        let sum = 0, count = 0;
+        for (let dy = syStart; dy < syEnd; dy++) {
+          const dyw = dy * w;
+          for (let dx = sxStart; dx < sxEnd; dx++) {
+            const idx = (dyw + dx) * 4;
+            sum += data[idx] * GRAY_R + data[idx+1] * GRAY_G + data[idx+2] * GRAY_B;
+            count++;
+          }
+        }
+        gray[syw + sx] = count > 0 ? sum / count : 0;
+      }
+    }
+    
+    // Generate Hilbert curve path
+    const hilbertPath = generateHilbertPath(sw, sh);
+    
+    // Error buffer for Riemersma (uses a queue of recent errors)
+    const queueSize = 16;
+    const errorQueue = new Float32Array(queueSize);
+    const weights = new Float32Array(queueSize);
+    let weightSum = 0;
+    
+    // Calculate exponential weights (more recent = higher weight)
+    for (let i = 0; i < queueSize; i++) {
+      weights[i] = Math.pow(2, -i / 4);
+      weightSum += weights[i];
+    }
+    
+    // Process pixels along Hilbert curve
+    for (let p = 0; p < hilbertPath.length; p++) {
+      const { x, y } = hilbertPath[p];
+      if (x >= sw || y >= sh) continue;
+      
+      const i = y * sw + x;
+      
+      // Add accumulated error from queue
+      let accError = 0;
+      for (let q = 0; q < queueSize; q++) {
+        accError += errorQueue[q] * weights[q];
+      }
+      accError /= weightSum;
+      
+      const oldPixel = gray[i] + accError;
+      const newPixel = oldPixel > thresh ? 255 : 0;
+      output[i] = newPixel;
+      const error = oldPixel - newPixel;
+      
+      // Shift error queue and add new error
+      for (let q = queueSize - 1; q > 0; q--) {
+        errorQueue[q] = errorQueue[q - 1];
+      }
+      errorQueue[0] = error;
+    }
+    
+    // Map back to full resolution
+    for (let y = 0; y < h; y++) {
+      const sy = Math.floor(y * invPixelScale);
+      const yw = y * w;
+      for (let x = 0; x < w; x++) {
+        const sx = Math.floor(x * invPixelScale);
+        const val = output[sy * sw + sx];
+        const idx = (yw + x) * 4;
+        data[idx] = data[idx+1] = data[idx+2] = val;
       }
     }
     return new ImageData(data, w, h);

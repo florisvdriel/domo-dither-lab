@@ -173,7 +173,7 @@ export default function CompositionPanel({
         ))}
 
         {/* Add Layer button */}
-        {layers.length < 4 && (
+        {layers.length < 10 && (
           <Button onClick={onAddLayer} style={{ marginTop: '8px' }}>
             + ADD LAYER
           </Button>
