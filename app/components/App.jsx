@@ -20,17 +20,13 @@ import { generateNamedPalette } from '../utils/paletteGenerator';
 
 // UI Components
 import Toast from './ui/Toast';
-import Tooltip from './ui/Tooltip';
-import Slider from './ui/Slider';
 import Button from './ui/Button';
-import { SwatchWithPicker, ColorSwatch } from './ui/ColorPicker';
-import Section from './ui/Section';
 import IconButton from './ui/IconButton';
-import AlgorithmSelect from './ui/AlgorithmSelect';
-import LayerPanel from './ui/LayerPanel';
 import DropZone from './ui/DropZone';
 import ComparisonSlider from './ui/ComparisonSlider';
 import SavePresetModal from './ui/SavePresetModal';
+import RightPanel from './ui/RightPanel';
+import CompositionPanel from './ui/CompositionPanel';
 
 
 export default function HalftoneLab() {
@@ -81,6 +77,11 @@ export default function HalftoneLab() {
   const [toastMessage, setToastMessage] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
   
+  // Selection state for context-sensitive right panel
+  // type: 'project' | 'source' | 'background' | 'layer'
+  // id: layer.id when type === 'layer'
+  const [selection, setSelection] = useState({ type: 'project', id: null });
+  
   const canvasRef = useRef(null);
   const originalCanvasRef = useRef(null);
   const sourceCanvasRef = useRef(null);
@@ -102,6 +103,22 @@ export default function HalftoneLab() {
   }, [palette]);
 
   const colorKeys = Object.keys(activePalette).filter(k => !['white', 'black'].includes(k));
+  
+  // Get the currently selected layer (if any)
+  const selectedLayer = useMemo(() => {
+    if (selection.type === 'layer' && selection.id !== null) {
+      return layers.find(l => l.id === selection.id) || null;
+    }
+    return null;
+  }, [selection, layers]);
+  
+  // Get the index of the selected layer
+  const selectedLayerIndex = useMemo(() => {
+    if (selection.type === 'layer' && selection.id !== null) {
+      return layers.findIndex(l => l.id === selection.id);
+    }
+    return -1;
+  }, [selection, layers]);
   
   // Track previous palette keys to detect changes
   const prevPaletteKeysRef = useRef(colorKeys);
@@ -210,7 +227,19 @@ export default function HalftoneLab() {
     setLayers(newLayers);
   };
 
-  const removeLayer = (index) => setLayers(layers.filter((_, i) => i !== index));
+  const removeLayer = (index) => {
+    // If removing the selected layer, deselect it
+    if (selection.type === 'layer' && selection.id === layers[index]?.id) {
+      setSelection({ type: 'project', id: null });
+    }
+    setLayers(layers.filter((_, i) => i !== index));
+  };
+  
+  const toggleLayerVisibility = (index) => {
+    const newLayers = [...layers];
+    newLayers[index] = { ...newLayers[index], visible: newLayers[index].visible === false ? true : false };
+    setLayers(newLayers);
+  };
   
   const duplicateLayer = (index) => {
     if (layers.length >= 4) return;
@@ -236,6 +265,12 @@ export default function HalftoneLab() {
 
   // Apply preset
   const applyPreset = (presetKey, isCustom = false) => {
+    // Handle randomize special case
+    if (presetKey === 'random') {
+      randomizeLayers();
+      return;
+    }
+    
     const preset = isCustom ? customPresets[presetKey] : PRESETS[presetKey];
     if (!preset) return;
     
@@ -298,7 +333,7 @@ export default function HalftoneLab() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `halftone-lab-presets-${new Date().toISOString().split('T')[0]}.json`;
+    link.download = `stack-lab-presets-${new Date().toISOString().split('T')[0]}.json`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -423,6 +458,16 @@ export default function HalftoneLab() {
     setPalette(colors);
     saveCustomPalette(colors);
     showToast('Palette reset to default');
+  };
+
+  // Reset image adjustments
+  const resetImageAdjustments = () => {
+    setImageScale(DEFAULT_STATE.imageScale);
+    setPreBlur(DEFAULT_STATE.preBlur);
+    setBrightness(DEFAULT_STATE.brightness);
+    setContrast(DEFAULT_STATE.contrast);
+    setInvert(DEFAULT_STATE.invert);
+    showToast('Image adjustments reset');
   };
 
   // Randomizer
@@ -737,7 +782,7 @@ export default function HalftoneLab() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `halftone-${exportResolution}.png`;
+    link.download = `stack-${exportResolution}.png`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -852,7 +897,7 @@ export default function HalftoneLab() {
         activePalette
       );
       
-      downloadSVG(svg, 'halftone-combined.svg');
+      downloadSVG(svg, 'stack-combined.svg');
       
       const estimatedSize = estimateSVGSize(debouncedLayers, dimensions, 1);
       const sizeKB = Math.round(estimatedSize / 1024);
@@ -909,285 +954,41 @@ export default function HalftoneLab() {
   return (
     <DropZone onDrop={loadImageFile}>
       <div style={{ display: 'flex', height: '100vh', backgroundColor: '#000', color: '#fff', fontFamily: 'monospace' }}>
-        {/* Sidebar */}
-        <div style={{ width: '300px', backgroundColor: '#0a0a0a', overflowY: 'auto', borderRight: '1px solid #222', display: 'flex', flexDirection: 'column' }}>
+        {/* Hidden file inputs */}
+        <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} style={{ display: 'none' }} />
+        <input ref={presetImportRef} type="file" accept=".json" onChange={importPresetsFromJSON} style={{ display: 'none' }} />
+        
+        {/* Left Sidebar - Composition */}
+        <div style={{ width: '240px', backgroundColor: '#0a0a0a', overflowY: 'auto', borderRight: '1px solid #222', display: 'flex', flexDirection: 'column' }}>
           
           {/* Header */}
           <div style={{ padding: '20px 16px', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h1 style={{ fontSize: '11px', letterSpacing: '0.2em', margin: 0, fontWeight: 400 }}>HALFTONE LAB</h1>
-            <IconButton onClick={resetAll} title="Reset all">↺</IconButton>
+            <h1 style={{ fontSize: '11px', letterSpacing: '0.2em', margin: 0, fontWeight: 400 }}>STACK LAB</h1>
+            <IconButton onClick={() => setSelection({ type: 'project', id: null })} title="Project settings">⚙</IconButton>
           </div>
           
-          {/* Source Section */}
-          <Section title="SOURCE">
-            <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} style={{ display: 'none' }} />
-            <Button primary onClick={() => fileInputRef.current.click()} style={{ marginBottom: '12px' }}>
-              {image ? 'CHANGE IMAGE' : 'UPLOAD IMAGE'}
-            </Button>
-            <p style={{ fontSize: '9px', color: '#444', margin: '0 0 16px 0', textAlign: 'center' }}>or drag & drop anywhere</p>
-            
-            {image && (
-              <>
-                <Slider label={`SCALE ${Math.round(imageScale * 100)}%`} value={imageScale} min={0.5} max={2} step={0.05} onChange={setImageScale} />
-                <Slider label={`PRE-BLUR ${Math.round(preBlur)}px`} value={preBlur} min={0} max={20} step={0.5} onChange={setPreBlur} />
-                <Button onClick={randomizeLayers}>↻ RANDOMIZE</Button>
-              </>
-            )}
-          </Section>
-          
-          {/* Palette Section */}
-          <Section title="PALETTE">
-            {/* Editable color swatches */}
-            <div style={{ 
-              display: 'flex', 
-              gap: '8px', 
-              marginBottom: '12px',
-              alignItems: 'flex-start'
-            }}>
-              {colorKeys.map(key => (
-                <SwatchWithPicker
-                  key={key} 
-                  color={palette[key]?.hex || '#000000'}
-                  onChange={(newHex) => updatePaletteColor(key, newHex)}
-                  size={40}
-                />
-              ))}
-            </div>
-            
-            {/* Palette actions */}
-            <div style={{ display: 'flex', gap: '4px' }}>
-              <Button onClick={randomizePalette} style={{ flex: 1 }}>
-                ↻ RANDOMIZE
-            </Button>
-              <Button onClick={resetPalette} style={{ flex: 1, opacity: 0.7 }}>
-                RESET
-              </Button>
-            </div>
-            
-            <p style={{ fontSize: '9px', color: '#444', margin: '8px 0 0 0', textAlign: 'center' }}>
-              Click swatches to edit colors
-            </p>
-          </Section>
-          
-          {/* Presets Section */}
-          <Section title="PRESETS" defaultOpen={false}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginBottom: '16px' }}>
-              {Object.entries(PRESETS).map(([key, preset]) => (
-                <Tooltip key={key} text={preset.description}>
-                  <Button onClick={() => applyPreset(key)} style={{ fontSize: '9px' }}>
-                    {preset.name}
-                  </Button>
-                </Tooltip>
-              ))}
-            </div>
-            
-            {/* Custom presets */}
-            {Object.keys(customPresets).length > 0 && (
-              <>
-                <label style={{ display: 'block', color: '#666', fontSize: '10px', marginBottom: '8px', fontFamily: 'monospace' }}>
-                  SAVED
-                </label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '16px' }}>
-                  {Object.entries(customPresets).map(([key, preset]) => (
-                    <div key={key} style={{ display: 'flex', gap: '4px' }}>
-                      <Button onClick={() => applyPreset(key, true)} style={{ flex: 1, fontSize: '9px' }}>
-                        {preset.name}
-                      </Button>
-                      <IconButton onClick={() => deleteCustomPreset(key)} title="Delete">×</IconButton>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-            
-            <Button onClick={() => setShowSaveModal(true)} style={{ marginBottom: '12px' }}>
-              + SAVE CURRENT AS PRESET
-            </Button>
-            
-            {/* Export/Import */}
-            <div style={{ borderTop: '1px solid #222', paddingTop: '12px', marginTop: '4px' }}>
-              <label style={{ display: 'block', color: '#666', fontSize: '10px', marginBottom: '8px', fontFamily: 'monospace' }}>
-                SHARE PRESETS
-              </label>
-              <input 
-                ref={presetImportRef}
-                type="file" 
-                accept=".json" 
-                onChange={importPresetsFromJSON} 
-                style={{ display: 'none' }} 
-              />
-              <div style={{ display: 'flex', gap: '4px' }}>
-                <Tooltip text="Export all saved presets as JSON">
-                  <Button 
-                    onClick={exportPresetsAsJSON} 
-                    style={{ flex: 1, fontSize: '9px', opacity: Object.keys(customPresets).length > 0 ? 1 : 0.4 }}
-                  >
-                    EXPORT
-                  </Button>
-                </Tooltip>
-                <Tooltip text="Import presets from JSON file">
-                  <Button 
-                    onClick={() => presetImportRef.current?.click()} 
-                    style={{ flex: 1, fontSize: '9px' }}
-                  >
-                    IMPORT
-                  </Button>
-                </Tooltip>
-              </div>
-            </div>
-          </Section>
-          
-          {/* Adjustments Section */}
-          <Section title="ADJUSTMENTS">
-            <Slider 
-              label={`BRIGHTNESS ${brightness > 0 ? '+' : ''}${Math.round(brightness * 100)}`} 
-              value={brightness} min={-0.5} max={0.5} step={0.01} onChange={setBrightness} 
-            />
-            <Slider 
-              label={`CONTRAST ${contrast > 0 ? '+' : ''}${Math.round(contrast * 100)}`} 
-              value={contrast} min={-0.5} max={0.5} step={0.01} onChange={setContrast} 
-            />
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-              <Button onClick={() => setInvert(!invert)} active={invert} style={{ flex: 1 }}>
-                {invert ? '◐ INVERTED' : '◑ INVERT'}
-              </Button>
-              <Button onClick={() => { setBrightness(0); setContrast(0); setInvert(false); }} style={{ flex: 1, color: '#666' }}>
-                RESET
-              </Button>
-            </div>
-          </Section>
-          
-          {/* Analog Effects Section */}
-          <Section title="ANALOG EFFECTS" defaultOpen={false}>
-            <div style={{ marginBottom: '16px' }}>
-              <Button onClick={() => setInkBleed(!inkBleed)} active={inkBleed} style={{ marginBottom: inkBleed ? '12px' : '0' }}>
-                {inkBleed ? '● INK BLEED ON' : '○ INK BLEED'}
-              </Button>
-              {inkBleed && (
-                <>
-                  <Slider 
-                    label={`SPREAD ${Math.round(inkBleedAmount * 100)}%`} 
-                    value={inkBleedAmount} min={0.1} max={1} step={0.05} onChange={setInkBleedAmount} 
-                  />
-                  <Slider 
-                    label={`ROUGHNESS ${Math.round(inkBleedRoughness * 100)}%`} 
-                    value={inkBleedRoughness} min={0} max={1} step={0.05} onChange={setInkBleedRoughness} 
-                  />
-                </>
-              )}
-            </div>
-            
-            <Button onClick={() => setPaperTexture(!paperTexture)} active={paperTexture}>
-              {paperTexture ? '● PAPER MODE ON' : '○ PAPER MODE'}
-            </Button>
-            <p style={{ fontSize: '9px', color: '#444', margin: '8px 0 0 0' }}>
-              Adds warm paper tint and texture overlay
-            </p>
-          </Section>
-          
-          {/* Layers Section */}
-          <Section title={`LAYERS ${layers.length}/4`}>
-              {layers.map((layer, i) => (
-                <LayerPanel
-                  key={layer.id}
-                  layer={layer}
-                  index={i}
-                  totalLayers={layers.length}
-                  onUpdate={(l) => updateLayer(i, l)}
-                  onRemove={() => removeLayer(i)}
-                  onDuplicate={() => duplicateLayer(i)}
-                  onMoveUp={() => moveLayerUp(i)}
-                  onMoveDown={() => moveLayerDown(i)}
-                  canRemove={layers.length > 1}
-                  palette={activePalette}
-                />
-              ))}
-              {layers.length < 4 && (
-                <Button onClick={addLayer}>+ ADD LAYER</Button>
-              )}
-          </Section>
-          
-          {/* Output Section */}
-          <Section title="OUTPUT">
-            <label style={{ 
-              display: 'block', 
-              color: '#666', 
-              fontSize: '10px', 
-              marginBottom: '8px', 
-              fontFamily: 'monospace',
-              letterSpacing: '0.05em'
-            }}>
-              BACKGROUND
-            </label>
-            <div style={{ 
-              display: 'flex', 
-              gap: '6px', 
-              marginBottom: '16px',
-              flexWrap: 'wrap'
-            }}>
-              {/* Palette colors */}
-              {colorKeys.map(key => (
-                <ColorSwatch
-                  key={key}
-                  color={palette[key]?.hex || '#000000'}
-                  selected={backgroundColor === palette[key]?.hex}
-                  onClick={() => setBackgroundColor(palette[key]?.hex)}
-                  size={28}
-                />
-              ))}
-              {/* Black and white */}
-              <ColorSwatch
-                color="#000000"
-                selected={backgroundColor === '#000000'}
-                onClick={() => setBackgroundColor('#000000')}
-                size={28}
-              />
-              <ColorSwatch
-                color="#FFFFFF"
-                selected={backgroundColor === '#FFFFFF' || backgroundColor === '#ffffff'}
-                onClick={() => setBackgroundColor('#FFFFFF')}
-                size={28}
-            />
-            </div>
-            
-            <label style={{ display: 'block', color: '#666', fontSize: '10px', marginBottom: '8px', fontFamily: 'monospace' }}>RESOLUTION</label>
-            <div style={{ display: 'flex', gap: '4px', marginBottom: '16px' }}>
-              {Object.entries(EXPORT_RESOLUTIONS).map(([key, { label }]) => (
-                <Button key={key} onClick={() => setExportResolution(key)} active={exportResolution === key} style={{ flex: 1, fontSize: '8px' }}>
-                  {label}
-                </Button>
-              ))}
-            </div>
-            
-            {image && (
-              <>
-                <Button primary onClick={exportPNG} style={{ marginBottom: '8px' }}>EXPORT PNG</Button>
-                
-                {/* SVG Export Options */}
-                <label style={{ display: 'block', color: '#666', fontSize: '10px', marginBottom: '8px', marginTop: '16px', fontFamily: 'monospace' }}>
-                  SVG EXPORT
-                </label>
-                <div style={{ display: 'flex', gap: '4px', marginBottom: '8px' }}>
-                  <Tooltip text="Single SVG with all layers as groups">
-                    <Button 
-                      onClick={exportSVGCombined} 
-                      style={{ flex: 1, fontSize: '9px' }}
-                    >
-                      COMBINED
-                    </Button>
-                  </Tooltip>
-                  <Tooltip text="ZIP file with separate SVG per layer">
-                    <Button 
-                      onClick={exportSVGLayers}
-                      style={{ flex: 1, fontSize: '9px' }}
-                    >
-                      LAYERS (ZIP)
-                    </Button>
-                  </Tooltip>
-                </div>
-              </>
-            )}
-          </Section>
+          <CompositionPanel
+            image={image}
+            onChangeImage={() => fileInputRef.current?.click()}
+            onReset={resetAll}
+            fileInputRef={fileInputRef}
+            selection={selection}
+            onSelectSource={() => setSelection({ type: 'source', id: null })}
+            onSelectBackground={() => setSelection({ type: 'background', id: null })}
+            onSelectLayer={(id) => setSelection({ type: 'layer', id })}
+            onSelectProject={() => setSelection({ type: 'project', id: null })}
+            backgroundColor={backgroundColor}
+            layers={layers}
+            onAddLayer={addLayer}
+            onToggleLayerVisibility={toggleLayerVisibility}
+            onDuplicateLayer={duplicateLayer}
+            onRemoveLayer={removeLayer}
+            palette={palette}
+            colorKeys={colorKeys}
+            onUpdatePaletteColor={updatePaletteColor}
+            onRandomizePalette={randomizePalette}
+            activePalette={activePalette}
+          />
         </div>
         
         {/* Canvas Area */}
@@ -1339,6 +1140,57 @@ export default function HalftoneLab() {
           )}
           <canvas ref={sourceCanvasRef} style={{ display: 'none' }} />
         </div>
+        
+        {/* Right Panel - Context-sensitive properties */}
+        <RightPanel
+          selection={selection}
+          // Project properties
+          customPresets={customPresets}
+          onApplyPreset={applyPreset}
+          onSavePreset={() => setShowSaveModal(true)}
+          onDeletePreset={deleteCustomPreset}
+          onExportPresets={exportPresetsAsJSON}
+          onImportPresets={importPresetsFromJSON}
+          presetImportRef={presetImportRef}
+          inkBleed={inkBleed}
+          onInkBleedChange={setInkBleed}
+          inkBleedAmount={inkBleedAmount}
+          onInkBleedAmountChange={setInkBleedAmount}
+          inkBleedRoughness={inkBleedRoughness}
+          onInkBleedRoughnessChange={setInkBleedRoughness}
+          paperTexture={paperTexture}
+          onPaperTextureChange={setPaperTexture}
+          backgroundColor={backgroundColor}
+          onBackgroundColorChange={setBackgroundColor}
+          exportResolution={exportResolution}
+          onExportResolutionChange={setExportResolution}
+          onExportPNG={exportPNG}
+          onExportSVGCombined={exportSVGCombined}
+          onExportSVGLayers={exportSVGLayers}
+          palette={palette}
+          colorKeys={colorKeys}
+          hasImage={!!image}
+          // Image properties
+          imageScale={imageScale}
+          onImageScaleChange={setImageScale}
+          preBlur={preBlur}
+          onPreBlurChange={setPreBlur}
+          brightness={brightness}
+          onBrightnessChange={setBrightness}
+          contrast={contrast}
+          onContrastChange={setContrast}
+          invert={invert}
+          onInvertChange={setInvert}
+          onResetImageAdjustments={resetImageAdjustments}
+          // Layer properties
+          selectedLayer={selectedLayer}
+          selectedLayerIndex={selectedLayerIndex}
+          totalLayers={layers.length}
+          onUpdateLayer={(newLayer) => selectedLayerIndex >= 0 && updateLayer(selectedLayerIndex, newLayer)}
+          onRemoveLayer={() => selectedLayerIndex >= 0 && removeLayer(selectedLayerIndex)}
+          onDuplicateLayer={() => selectedLayerIndex >= 0 && duplicateLayer(selectedLayerIndex)}
+          activePalette={activePalette}
+        />
         
         <Toast message={toastMessage} visible={toastVisible} onHide={() => setToastVisible(false)} />
         
