@@ -968,7 +968,7 @@ export default function HalftoneLab() {
         <input ref={presetImportRef} type="file" accept=".json" onChange={importPresetsFromJSON} style={{ display: 'none' }} />
         
         {/* Left Sidebar - Composition */}
-        <div style={{ width: '240px', backgroundColor: '#0a0a0a', overflowY: 'auto', borderRight: '1px solid #222', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ width: '240px', backgroundColor: '#0a0a0a', borderRight: '1px solid #222', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           
           {/* Header */}
           <div style={{ padding: '20px 16px', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1019,6 +1019,12 @@ export default function HalftoneLab() {
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
+          onClick={(e) => {
+            // Click on canvas background (outside image) shows project properties
+            if (e.target === canvasContainerRef.current) {
+              setSelection({ type: 'project', id: null });
+            }
+          }}
         >
           {/* Paper texture overlay - warm tint + noise */}
           {paperTexture && image && (

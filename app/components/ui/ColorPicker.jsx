@@ -338,14 +338,14 @@ export function InlineColorPicker({ color, onChange, size = 36 }) {
   }, [onChange]);
 
   return (
-    <div ref={containerRef} style={{ position: 'relative' }}>
+    <div ref={containerRef} style={{ position: 'relative', width: size, height: size }}>
       <button
         onClick={() => setIsOpen(!isOpen)}
         onMouseEnter={() => setHovering(true)}
         onMouseLeave={() => setHovering(false)}
         style={{
-          width: size,
-          height: size,
+          width: '100%',
+          height: '100%',
           backgroundColor: localColor,
           border: hovering ? '1px solid #444' : '1px solid #222',
           borderRadius: 0,
