@@ -37,28 +37,28 @@ function hslToRgb(h, s, l) {
   h = h / 360;
   s = s / 100;
   l = l / 100;
-  
+
   let r, g, b;
-  
+
   if (s === 0) {
     r = g = b = l;
   } else {
     const hue2rgb = (p, q, t) => {
       if (t < 0) t += 1;
       if (t > 1) t -= 1;
-      if (t < 1/6) return p + (q - p) * 6 * t;
-      if (t < 1/2) return q;
-      if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+      if (t < 1 / 6) return p + (q - p) * 6 * t;
+      if (t < 1 / 2) return q;
+      if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
       return p;
     };
-    
+
     const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
     const p = 2 * l - q;
-    r = hue2rgb(p, q, h + 1/3);
+    r = hue2rgb(p, q, h + 1 / 3);
     g = hue2rgb(p, q, h);
-    b = hue2rgb(p, q, h - 1/3);
+    b = hue2rgb(p, q, h - 1 / 3);
   }
-  
+
   return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
 }
 
@@ -75,25 +75,90 @@ function rgbToHsl(r, g, b) {
   r /= 255;
   g /= 255;
   b /= 255;
-  
+
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
   let h, s, l = (max + min) / 2;
-  
+
   if (max === min) {
     h = s = 0;
   } else {
     const d = max - min;
     s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-    
+
     switch (max) {
       case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
       case g: h = ((b - r) / d + 2) / 6; break;
       case b: h = ((r - g) / d + 4) / 6; break;
     }
   }
-  
+
   return [h * 360, s * 100, l * 100];
+}
+
+// Convert hex to HSL
+function hexToHsl(hex) {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!result) return [0, 0, 0];
+  const r = parseInt(result[1], 16);
+  const g = parseInt(result[2], 16);
+  const b = parseInt(result[3], 16);
+  return rgbToHsl(r, g, b);
+}
+
+// Color name mappings based on hue ranges
+const HUE_NAMES = [
+  { min: 0, max: 15, names: ['Crimson', 'Ruby', 'Scarlet', 'Cherry'] },
+  { min: 15, max: 45, names: ['Amber', 'Copper', 'Tangerine', 'Apricot'] },
+  { min: 45, max: 70, names: ['Gold', 'Honey', 'Mustard', 'Lemon'] },
+  { min: 70, max: 100, names: ['Lime', 'Chartreuse', 'Spring', 'Pear'] },
+  { min: 100, max: 150, names: ['Jade', 'Sage', 'Mint', 'Forest'] },
+  { min: 150, max: 180, names: ['Teal', 'Aqua', 'Turquoise', 'Ocean'] },
+  { min: 180, max: 220, names: ['Cyan', 'Sky', 'Arctic', 'Glacier'] },
+  { min: 220, max: 260, names: ['Azure', 'Navy', 'Cobalt', 'Sapphire'] },
+  { min: 260, max: 290, names: ['Violet', 'Plum', 'Lavender', 'Iris'] },
+  { min: 290, max: 330, names: ['Berry', 'Rose', 'Fuchsia', 'Magenta'] },
+  { min: 330, max: 360, names: ['Crimson', 'Ruby', 'Scarlet', 'Cherry'] }
+];
+
+/**
+ * Get a descriptive color name from a hex value based on its hue
+ * @param {string} hex - Hex color value (e.g., '#E86A58')
+ * @returns {string} Descriptive color name (e.g., 'Deep Coral')
+ */
+export function getColorNameFromHex(hex) {
+  const [h, s, l] = hexToHsl(hex);
+
+  // Handle grayscale (very low saturation)
+  if (s < 10) {
+    if (l < 20) return 'Onyx';
+    if (l < 40) return 'Charcoal';
+    if (l < 60) return 'Slate';
+    if (l < 80) return 'Silver';
+    return 'Pearl';
+  }
+
+  // Find base name from hue
+  let baseName = 'Coral'; // fallback
+  for (const range of HUE_NAMES) {
+    if (h >= range.min && h < range.max) {
+      // Pick a random name from the range for variety
+      baseName = range.names[Math.floor(Math.random() * range.names.length)];
+      break;
+    }
+  }
+
+  // Add modifier based on saturation and lightness
+  let modifier = '';
+  if (l < 30) {
+    modifier = 'Deep';
+  } else if (l > 70) {
+    modifier = 'Light';
+  } else if (s < 40) {
+    modifier = 'Muted';
+  }
+
+  return modifier ? `${modifier} ${baseName}` : baseName;
 }
 
 // Generate a random base hue
@@ -141,14 +206,14 @@ function generateAnalogous(baseHue, baseSat, baseLight, count = 4) {
   const colors = [];
   const step = 30; // 30° apart
   const startOffset = -step * Math.floor(count / 2);
-  
+
   for (let i = 0; i < count; i++) {
     const hue = normalizeHue(baseHue + startOffset + (i * step));
     // Vary lightness slightly for visual interest
-    const lightVariation = (i - count/2) * 5;
+    const lightVariation = (i - count / 2) * 5;
     colors.push(createColor(`Color ${i + 1}`, hue, baseSat, baseLight + lightVariation));
   }
-  
+
   return colors;
 }
 
@@ -188,13 +253,13 @@ function generateMonochromatic(baseHue, baseSat, baseLight) {
   const count = 4;
   const lightStep = 45 / (count - 1); // Spread across lightness range
   const satVariation = 10;
-  
+
   for (let i = 0; i < count; i++) {
     const light = 30 + (i * lightStep); // 30% to 75%
     const sat = baseSat + (Math.random() - 0.5) * satVariation;
     colors.push(createColor(`Shade ${i + 1}`, baseHue, Math.max(30, Math.min(90, sat)), light));
   }
-  
+
   return colors;
 }
 
@@ -211,9 +276,9 @@ export function generatePalette(harmonyType, baseHue = null, baseSat = null, bas
   const hue = baseHue !== null ? baseHue : randomHue();
   const sat = baseSat !== null ? baseSat : randomSaturation();
   const light = baseLight !== null ? baseLight : randomLightness();
-  
+
   let colors;
-  
+
   switch (harmonyType) {
     case 'analogous':
       colors = generateAnalogous(hue, sat, light, 4);
@@ -233,14 +298,14 @@ export function generatePalette(harmonyType, baseHue = null, baseSat = null, bas
     default:
       colors = generateTetradic(hue, sat, light);
   }
-  
+
   // Convert array to palette object
   const palette = {};
   colors.forEach((color, index) => {
     const key = color.name.toLowerCase().replace(/\s+/g, '_');
     palette[key] = color;
   });
-  
+
   return palette;
 }
 
@@ -272,7 +337,7 @@ export function generateNamedPalette(harmonyType) {
   const rawPalette = generatePalette(harmonyType);
   const palette = {};
   const usedNames = new Set();
-  
+
   Object.values(rawPalette).forEach((color, index) => {
     // Pick a unique name
     let name;
@@ -280,14 +345,14 @@ export function generateNamedPalette(harmonyType) {
       name = COLOR_NAMES[Math.floor(Math.random() * COLOR_NAMES.length)];
     } while (usedNames.has(name) && usedNames.size < COLOR_NAMES.length);
     usedNames.add(name);
-    
+
     const key = name.toLowerCase();
     palette[key] = {
       ...color,
       name
     };
   });
-  
+
   return palette;
 }
 

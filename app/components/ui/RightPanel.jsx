@@ -52,7 +52,8 @@ export default function RightPanel({
   onUpdateLayer,
   onRemoveLayer,
   onDuplicateLayer,
-  activePalette
+  activePalette,
+  onUpdatePaletteColor
 }) {
   const getPanelTitle = () => {
     switch (selection.type) {
@@ -96,6 +97,7 @@ export default function RightPanel({
             onDuplicate={onDuplicateLayer}
             canRemove={totalLayers > 1}
             palette={activePalette}
+            onUpdatePaletteColor={onUpdatePaletteColor}
           />
         ) : null;
       case 'background':
@@ -164,7 +166,7 @@ export default function RightPanel({
           {getPanelTitle()}
         </h2>
       </div>
-      
+
       {/* Panel Content */}
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {renderPanel()}
