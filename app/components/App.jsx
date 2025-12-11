@@ -1070,49 +1070,49 @@ export default function HalftoneLab() {
   }, [image, previewImage, debouncedImageScale, debouncedLayers, backgroundColor, getSourceImageData, activePalette]);
 
   return (
-    <DropZone onDrop={loadImageFile}>
-      <div style={{ display: 'flex', height: '100vh', backgroundColor: '#000', color: '#fff', fontFamily: 'monospace' }}>
-        {/* Hidden file inputs */}
-        <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} style={{ display: 'none' }} />
-        <input ref={presetImportRef} type="file" accept=".json" onChange={importPresetsFromJSON} style={{ display: 'none' }} />
+    <div style={{ display: 'flex', height: '100vh', backgroundColor: '#000', color: '#fff', fontFamily: 'monospace' }}>
+      {/* Hidden file inputs */}
+      <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} style={{ display: 'none' }} />
+      <input ref={presetImportRef} type="file" accept=".json" onChange={importPresetsFromJSON} style={{ display: 'none' }} />
 
-        {/* Left Sidebar - Composition */}
-        <div style={{ width: '240px', backgroundColor: '#0a0a0a', borderRight: '1px solid #222', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {/* Left Sidebar - Composition */}
+      <div style={{ width: '240px', backgroundColor: '#0a0a0a', borderRight: '1px solid #222', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
-          {/* Header */}
-          <div style={{ padding: '20px 16px', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h1 style={{ fontSize: '11px', letterSpacing: '0.2em', margin: 0, fontWeight: 400 }}>STACK LAB</h1>
-            <IconButton onClick={() => setSelection({ type: 'project', id: null })} title="Project settings">⚙</IconButton>
-          </div>
-
-          <CompositionPanel
-            image={image}
-            onChangeImage={() => fileInputRef.current?.click()}
-            onReset={resetAll}
-            fileInputRef={fileInputRef}
-            selection={selection}
-            onSelectSource={() => setSelection({ type: 'source', id: null })}
-            onSelectBackground={() => setSelection({ type: 'background', id: null })}
-            onSelectLayer={(id) => setSelection({ type: 'layer', id })}
-            onSelectProject={() => setSelection({ type: 'project', id: null })}
-            backgroundColor={backgroundColor}
-            layers={layers}
-            onAddLayer={addLayer}
-            onToggleLayerVisibility={toggleLayerVisibility}
-            onDuplicateLayer={duplicateLayer}
-            onRemoveLayer={removeLayer}
-            palette={palette}
-            colorKeys={colorKeys}
-            onUpdatePaletteColor={updatePaletteColor}
-            onRandomizePalette={randomizePalette}
-            activePalette={activePalette}
-            lockedColors={lockedColors}
-            onToggleColorLock={toggleColorLock}
-            onReorderLayers={reorderLayers}
-          />
+        {/* Header */}
+        <div style={{ padding: '20px 16px', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h1 style={{ fontSize: '11px', letterSpacing: '0.2em', margin: 0, fontWeight: 400 }}>STACK LAB</h1>
+          <IconButton onClick={() => setSelection({ type: 'project', id: null })} title="Project settings">⚙</IconButton>
         </div>
 
-        {/* Canvas Area */}
+        <CompositionPanel
+          image={image}
+          onChangeImage={() => fileInputRef.current?.click()}
+          onReset={resetAll}
+          fileInputRef={fileInputRef}
+          selection={selection}
+          onSelectSource={() => setSelection({ type: 'source', id: null })}
+          onSelectBackground={() => setSelection({ type: 'background', id: null })}
+          onSelectLayer={(id) => setSelection({ type: 'layer', id })}
+          onSelectProject={() => setSelection({ type: 'project', id: null })}
+          backgroundColor={backgroundColor}
+          layers={layers}
+          onAddLayer={addLayer}
+          onToggleLayerVisibility={toggleLayerVisibility}
+          onDuplicateLayer={duplicateLayer}
+          onRemoveLayer={removeLayer}
+          palette={palette}
+          colorKeys={colorKeys}
+          onUpdatePaletteColor={updatePaletteColor}
+          onRandomizePalette={randomizePalette}
+          activePalette={activePalette}
+          lockedColors={lockedColors}
+          onToggleColorLock={toggleColorLock}
+          onReorderLayers={reorderLayers}
+        />
+      </div>
+
+      {/* Canvas Area */}
+      <DropZone onDrop={loadImageFile} style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         <div
           ref={canvasContainerRef}
           style={{
@@ -1267,68 +1267,68 @@ export default function HalftoneLab() {
           )}
           <canvas ref={sourceCanvasRef} style={{ display: 'none' }} />
         </div>
+      </DropZone>
 
-        {/* Right Panel - Context-sensitive properties */}
-        <RightPanel
-          selection={selection}
-          // Project properties
-          customPresets={customPresets}
-          onApplyPreset={applyPreset}
-          onSavePreset={() => setShowSaveModal(true)}
-          onDeletePreset={deleteCustomPreset}
-          onExportPresets={exportPresetsAsJSON}
-          onImportPresets={importPresetsFromJSON}
-          presetImportRef={presetImportRef}
-          inkBleed={inkBleed}
-          onInkBleedChange={setInkBleed}
-          inkBleedAmount={inkBleedAmount}
-          onInkBleedAmountChange={setInkBleedAmount}
-          inkBleedRoughness={inkBleedRoughness}
-          onInkBleedRoughnessChange={setInkBleedRoughness}
-          paperTexture={paperTexture}
-          onPaperTextureChange={setPaperTexture}
-          backgroundColor={backgroundColor}
-          onBackgroundColorChange={setBackgroundColor}
-          exportResolution={exportResolution}
-          onExportResolutionChange={setExportResolution}
-          onExportPNG={exportPNG}
-          onExportSVGCombined={exportSVGCombined}
-          onExportSVGLayers={exportSVGLayers}
-          palette={palette}
-          colorKeys={colorKeys}
-          hasImage={!!image}
-          // Image properties
-          imageScale={imageScale}
-          onImageScaleChange={setImageScale}
-          preBlur={preBlur}
-          onPreBlurChange={setPreBlur}
-          brightness={brightness}
-          onBrightnessChange={setBrightness}
-          contrast={contrast}
-          onContrastChange={setContrast}
-          invert={invert}
-          onInvertChange={setInvert}
-          onResetImageAdjustments={resetImageAdjustments}
-          // Layer properties
-          selectedLayer={selectedLayer}
-          selectedLayerIndex={selectedLayerIndex}
-          totalLayers={layers.length}
-          onUpdateLayer={(newLayer) => selectedLayerIndex >= 0 && updateLayer(selectedLayerIndex, newLayer)}
-          onRemoveLayer={() => selectedLayerIndex >= 0 && removeLayer(selectedLayerIndex)}
-          onDuplicateLayer={() => selectedLayerIndex >= 0 && duplicateLayer(selectedLayerIndex)}
-          activePalette={activePalette}
-          onUpdatePaletteColor={updatePaletteColor}
+      {/* Right Panel - Context-sensitive properties */}
+      <RightPanel
+        selection={selection}
+        // Project properties
+        customPresets={customPresets}
+        onApplyPreset={applyPreset}
+        onSavePreset={() => setShowSaveModal(true)}
+        onDeletePreset={deleteCustomPreset}
+        onExportPresets={exportPresetsAsJSON}
+        onImportPresets={importPresetsFromJSON}
+        presetImportRef={presetImportRef}
+        inkBleed={inkBleed}
+        onInkBleedChange={setInkBleed}
+        inkBleedAmount={inkBleedAmount}
+        onInkBleedAmountChange={setInkBleedAmount}
+        inkBleedRoughness={inkBleedRoughness}
+        onInkBleedRoughnessChange={setInkBleedRoughness}
+        paperTexture={paperTexture}
+        onPaperTextureChange={setPaperTexture}
+        backgroundColor={backgroundColor}
+        onBackgroundColorChange={setBackgroundColor}
+        exportResolution={exportResolution}
+        onExportResolutionChange={setExportResolution}
+        onExportPNG={exportPNG}
+        onExportSVGCombined={exportSVGCombined}
+        onExportSVGLayers={exportSVGLayers}
+        palette={palette}
+        colorKeys={colorKeys}
+        hasImage={!!image}
+        // Image properties
+        imageScale={imageScale}
+        onImageScaleChange={setImageScale}
+        preBlur={preBlur}
+        onPreBlurChange={setPreBlur}
+        brightness={brightness}
+        onBrightnessChange={setBrightness}
+        contrast={contrast}
+        onContrastChange={setContrast}
+        invert={invert}
+        onInvertChange={setInvert}
+        onResetImageAdjustments={resetImageAdjustments}
+        // Layer properties
+        selectedLayer={selectedLayer}
+        selectedLayerIndex={selectedLayerIndex}
+        totalLayers={layers.length}
+        onUpdateLayer={(newLayer) => selectedLayerIndex >= 0 && updateLayer(selectedLayerIndex, newLayer)}
+        onRemoveLayer={() => selectedLayerIndex >= 0 && removeLayer(selectedLayerIndex)}
+        onDuplicateLayer={() => selectedLayerIndex >= 0 && duplicateLayer(selectedLayerIndex)}
+        activePalette={activePalette}
+        onUpdatePaletteColor={updatePaletteColor}
+      />
+
+      <Toast message={toastMessage} visible={toastVisible} onHide={() => setToastVisible(false)} />
+
+      {showSaveModal && (
+        <SavePresetModal
+          onSave={saveCustomPreset}
+          onCancel={() => setShowSaveModal(false)}
         />
-
-        <Toast message={toastMessage} visible={toastVisible} onHide={() => setToastVisible(false)} />
-
-        {showSaveModal && (
-          <SavePresetModal
-            onSave={saveCustomPreset}
-            onCancel={() => setShowSaveModal(false)}
-          />
-        )}
-      </div>
-    </DropZone>
+      )}
+    </div>
   );
 }

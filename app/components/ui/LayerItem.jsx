@@ -46,6 +46,13 @@ export default function LayerItem({
       onClick={onSelect}
     >
       <div style={{ display: 'flex' }}>
+        {/* Color indicator stripe */}
+        <div style={{
+          width: '4px',
+          flexShrink: 0,
+          backgroundColor: layerColor
+        }} />
+
         {/* Drag Handle */}
         <div style={{
           width: '18px',
@@ -60,13 +67,6 @@ export default function LayerItem({
         }}>
           ⋮
         </div>
-
-        {/* Color indicator stripe */}
-        <div style={{
-          width: '4px',
-          flexShrink: 0,
-          backgroundColor: layerColor
-        }} />
 
         <div style={{
           flex: 1,
