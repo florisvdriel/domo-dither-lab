@@ -180,6 +180,7 @@ export default function HalftoneLab() {
     previewCanvas.width = Math.round(image.width * scale);
     previewCanvas.height = Math.round(image.height * scale);
     const ctx = previewCanvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false; // Crisp nearest-neighbor scaling
     ctx.drawImage(image, 0, 0, previewCanvas.width, previewCanvas.height);
 
     const previewImg = new Image();
@@ -616,6 +617,7 @@ export default function HalftoneLab() {
     const ctx = targetCanvas.getContext('2d');
     const sourceCanvas = document.createElement('canvas');
     const sourceCtx = sourceCanvas.getContext('2d');
+    sourceCtx.imageSmoothingEnabled = false; // Crisp nearest-neighbor scaling
 
     // Output dimensions match source image (previewImage is already limited to PREVIEW_MAX_WIDTH)
     const outputWidth = sourceImage.width;
@@ -706,35 +708,60 @@ export default function HalftoneLab() {
       const layerOffsetY = layer.offsetY;
       const ditheredDataArray = ditheredData.data;
 
-      // Map from output coordinates to dithered data coordinates
-      const scaleX = scaledWidth / outputWidth;
-      const scaleY = scaledHeight / outputHeight;
+      // Check if we can use direct 1:1 mapping (no scaling needed)
+      const isDirectMapping = scaledWidth === outputWidth && scaledHeight === outputHeight;
 
-      // Pre-calculate bounds to avoid per-pixel checks where possible
-      const minY = Math.max(0, Math.ceil(-layerOffsetY * scaleY));
-      const maxY = Math.min(outputHeight, Math.floor((scaledHeight - 1) / scaleY + layerOffsetY));
+      if (isDirectMapping) {
+        // Fast path: direct 1:1 pixel copy with offset
+        for (let y = 0; y < outputHeight; y++) {
+          const sy = y - layerOffsetY;
+          if (sy < 0 || sy >= outputHeight) continue;
 
-      for (let y = 0; y < outputHeight; y++) {
-        const sy = Math.round((y - layerOffsetY) * scaleY);
-        if (sy < 0 || sy >= scaledHeight) continue;
+          const syw = sy * outputWidth;
+          const yw = y * outputWidth;
 
-        const syw = sy * scaledWidth;
-        const yw = y * outputWidth;
+          for (let x = 0; x < outputWidth; x++) {
+            const sx = x - layerOffsetX;
+            if (sx < 0 || sx >= outputWidth) continue;
 
-        for (let x = 0; x < outputWidth; x++) {
-          const sx = Math.round((x - layerOffsetX) * scaleX);
-          if (sx < 0 || sx >= scaledWidth) continue;
+            const si = (syw + sx) << 2;
+            const di = (yw + x) << 2;
 
-          const si = (syw + sx) << 2; // Faster than * 4
-          const di = (yw + x) << 2;
+            const darkness = 1 - (ditheredDataArray[si] * inv255);
+            if (darkness > minDarkness) {
+              const alpha = layerOpacity * darkness;
+              baseData[di] = blendFn(baseData[di], r, alpha);
+              baseData[di + 1] = blendFn(baseData[di + 1], g, alpha);
+              baseData[di + 2] = blendFn(baseData[di + 2], b, alpha);
+            }
+          }
+        }
+      } else {
+        // Scaled path: map from output coordinates to dithered data coordinates
+        const scaleX = scaledWidth / outputWidth;
+        const scaleY = scaledHeight / outputHeight;
 
-          const darkness = 1 - (ditheredDataArray[si] * inv255);
-          // Treat near-white pixels as fully transparent (screen print behavior)
-          if (darkness > minDarkness) {
-            const alpha = layerOpacity * darkness;
-            baseData[di] = blendFn(baseData[di], r, alpha);
-            baseData[di + 1] = blendFn(baseData[di + 1], g, alpha);
-            baseData[di + 2] = blendFn(baseData[di + 2], b, alpha);
+        for (let y = 0; y < outputHeight; y++) {
+          const sy = Math.round((y - layerOffsetY) * scaleY);
+          if (sy < 0 || sy >= scaledHeight) continue;
+
+          const syw = sy * scaledWidth;
+          const yw = y * outputWidth;
+
+          for (let x = 0; x < outputWidth; x++) {
+            const sx = Math.round((x - layerOffsetX) * scaleX);
+            if (sx < 0 || sx >= scaledWidth) continue;
+
+            const si = (syw + sx) << 2;
+            const di = (yw + x) << 2;
+
+            const darkness = 1 - (ditheredDataArray[si] * inv255);
+            if (darkness > minDarkness) {
+              const alpha = layerOpacity * darkness;
+              baseData[di] = blendFn(baseData[di], r, alpha);
+              baseData[di + 1] = blendFn(baseData[di + 1], g, alpha);
+              baseData[di + 2] = blendFn(baseData[di + 2], b, alpha);
+            }
           }
         }
       }
