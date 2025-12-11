@@ -49,7 +49,8 @@ export default function CompositionPanel({
   onRandomizePalette,
   activePalette,
   lockedColors = new Set(),
-  onToggleColorLock
+  onToggleColorLock,
+  onReorderLayers
 }) {
   const [sourceHovering, setSourceHovering] = useState(false);
   const [bgHovering, setBgHovering] = useState(false);
@@ -61,6 +62,24 @@ export default function CompositionPanel({
       .filter(layer => layer.visible !== false) // Only count visible layers
       .map(layer => layer.colorKey)
   );
+
+  const handleDragStart = (e, index) => {
+    e.dataTransfer.setData('layerIndex', index);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e, targetIndex) => {
+    e.preventDefault();
+    const sourceIndex = parseInt(e.dataTransfer.getData('layerIndex'), 10);
+    if (!isNaN(sourceIndex) && sourceIndex !== targetIndex) {
+      onReorderLayers && onReorderLayers(sourceIndex, targetIndex);
+    }
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
@@ -204,6 +223,10 @@ export default function CompositionPanel({
               canRemove={layers.length > 1}
               palette={activePalette}
               isSelected={selection.type === 'layer' && selection.id === layer.id}
+              draggable={true}
+              onDragStart={(e) => handleDragStart(e, i)}
+              onDragOver={handleDragOver}
+              onDrop={(e) => handleDrop(e, i)}
             />
           ))}
 

@@ -4,17 +4,22 @@ import { useState } from 'react';
 import { DITHER_ALGORITHMS } from '../../constants/ditherAlgorithms';
 import IconButton from './IconButton';
 
-export default function LayerItem({ 
-  layer, 
-  index, 
-  totalLayers, 
+export default function LayerItem({
+  layer,
+  index,
+  totalLayers,
   onSelect,
   onToggleVisibility,
   onDuplicate,
   onRemove,
   canRemove,
   palette,
-  isSelected
+  isSelected,
+  draggable,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd
 }) {
   const [hovering, setHovering] = useState(false);
   const algoInfo = DITHER_ALGORITHMS[layer.ditherType];
@@ -22,50 +27,70 @@ export default function LayerItem({
   const layerColor = palette[layer.colorKey]?.hex || '#fff';
 
   return (
-    <div 
-      style={{ 
-        marginBottom: '4px', 
-        backgroundColor: isSelected ? '#1a1a1a' : '#000', 
+    <div
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
+      style={{
+        marginBottom: '4px',
+        backgroundColor: isSelected ? '#1a1a1a' : '#000',
         border: isSelected ? '1px solid #444' : (hovering ? '1px solid #333' : '1px solid #222'),
         transition: 'all 0.12s ease',
         opacity: isVisible ? 1 : 0.5,
-        cursor: 'pointer'
+        cursor: 'grab'
       }}
       onMouseEnter={() => setHovering(true)}
       onMouseLeave={() => setHovering(false)}
       onClick={onSelect}
     >
       <div style={{ display: 'flex' }}>
+        {/* Drag Handle */}
+        <div style={{
+          width: '18px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#333',
+          borderRight: '1px solid #1a1a1a',
+          cursor: 'grab',
+          fontSize: '14px',
+          lineHeight: 1
+        }}>
+          ⋮
+        </div>
+
         {/* Color indicator stripe */}
-        <div style={{ 
-          width: '4px', 
-          flexShrink: 0, 
-          backgroundColor: layerColor 
+        <div style={{
+          width: '4px',
+          flexShrink: 0,
+          backgroundColor: layerColor
         }} />
-        
-        <div style={{ 
-          flex: 1, 
-          display: 'flex', 
-          alignItems: 'center', 
+
+        <div style={{
+          flex: 1,
+          display: 'flex',
+          alignItems: 'center',
           padding: '10px 12px',
           gap: '8px'
         }}>
           {/* Visibility toggle */}
-          <IconButton 
-            onClick={(e) => { 
-              e.stopPropagation(); 
-              onToggleVisibility(); 
-            }} 
+          <IconButton
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleVisibility();
+            }}
             title={isVisible ? "Hide layer" : "Show layer"}
           >
             {isVisible ? '◉' : '○'}
           </IconButton>
-          
+
           {/* Layer info */}
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ 
-              fontSize: '10px', 
-              color: '#888', 
+            <div style={{
+              fontSize: '10px',
+              color: '#888',
               fontFamily: 'monospace',
               display: 'flex',
               gap: '4px',
@@ -73,9 +98,9 @@ export default function LayerItem({
             }}>
               <span style={{ color: '#666' }}>LAYER {index + 1}</span>
             </div>
-            <div style={{ 
-              fontSize: '9px', 
-              color: '#555', 
+            <div style={{
+              fontSize: '9px',
+              color: '#555',
               fontFamily: 'monospace',
               marginTop: '2px',
               textTransform: 'uppercase',
@@ -86,24 +111,24 @@ export default function LayerItem({
               {algoInfo?.name || 'UNKNOWN'}
             </div>
           </div>
-          
+
           {/* Actions (only visible on hover or when selected) */}
-          <div style={{ 
-            display: 'flex', 
+          <div style={{
+            display: 'flex',
             gap: '2px',
             opacity: hovering || isSelected ? 1 : 0,
             transition: 'opacity 0.12s ease'
           }}>
-            <IconButton 
-              onClick={(e) => { e.stopPropagation(); onDuplicate(); }} 
+            <IconButton
+              onClick={(e) => { e.stopPropagation(); onDuplicate(); }}
               title="Duplicate"
               style={{ fontSize: '10px' }}
             >
               ⧉
             </IconButton>
             {canRemove && (
-              <IconButton 
-                onClick={(e) => { e.stopPropagation(); onRemove(); }} 
+              <IconButton
+                onClick={(e) => { e.stopPropagation(); onRemove(); }}
                 title="Remove"
                 style={{ fontSize: '10px' }}
               >

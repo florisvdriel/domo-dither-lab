@@ -588,6 +588,15 @@ export default function HalftoneLab() {
     ]);
   };
 
+  const reorderLayers = (fromIndex, toIndex) => {
+    setLayers(prevLayers => {
+      const newLayers = [...prevLayers];
+      const [movedLayer] = newLayers.splice(fromIndex, 1);
+      newLayers.splice(toIndex, 0, movedLayer);
+      return newLayers;
+    });
+  };
+
   const handleImageUpload = (e) => {
     const file = e.target.files?.[0];
     if (file) loadImageFile(file);
@@ -1099,6 +1108,7 @@ export default function HalftoneLab() {
             activePalette={activePalette}
             lockedColors={lockedColors}
             onToggleColorLock={toggleColorLock}
+            onReorderLayers={reorderLayers}
           />
         </div>
 
