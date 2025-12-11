@@ -99,10 +99,10 @@ export default function ProjectPropertiesPanel({
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Scrollable Middle Section (Presets + Analog Effects) */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
-        
+
         {/* Presets Section */}
         <SectionHeader title="PRESETS" />
-        
+
         {/* Tabs */}
         <div style={{ display: 'flex', marginBottom: '12px', borderBottom: '1px solid #222' }}>
           <button
@@ -142,9 +142,9 @@ export default function ProjectPropertiesPanel({
         </div>
 
         {/* Randomize Button - Full width with icon */}
-        <Button 
-          onClick={() => onApplyPreset('random')} 
-          style={{ 
+        <Button
+          onClick={() => onApplyPreset('random')}
+          style={{
             marginBottom: '12px',
             display: 'flex',
             alignItems: 'center',
@@ -158,9 +158,9 @@ export default function ProjectPropertiesPanel({
 
         {presetTab === 'default' ? (
           /* Default Presets Grid - 4 columns */
-          <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(4, 1fr)', 
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, 1fr)',
             gap: '6px',
             marginBottom: '24px'
           }}>
@@ -170,7 +170,7 @@ export default function ProjectPropertiesPanel({
               const totalPresets = presetEntries.length;
               const remainder = totalPresets % 4;
               const isLastRow = index >= totalPresets - remainder && remainder > 0;
-              
+
               let gridColumn = 'auto';
               if (isLastRow) {
                 if (remainder === 1) {
@@ -188,9 +188,9 @@ export default function ProjectPropertiesPanel({
 
               return (
                 <Tooltip key={key} text={preset.description}>
-                  <Button 
-                    onClick={() => onApplyPreset(key)} 
-                    style={{ 
+                  <Button
+                    onClick={() => onApplyPreset(key)}
+                    style={{
                       fontSize: '9px',
                       gridColumn
                     }}
@@ -220,32 +220,32 @@ export default function ProjectPropertiesPanel({
                 No custom presets saved
               </p>
             )}
-            
+
             <Button onClick={onSavePreset} style={{ marginBottom: '12px' }}>
               + SAVE CURRENT AS PRESET
             </Button>
-            
+
             {/* Export/Import */}
             <div style={{ borderTop: '1px solid #222', paddingTop: '12px', marginTop: '4px' }}>
-              <input 
+              <input
                 ref={presetImportRef}
-                type="file" 
-                accept=".json" 
-                onChange={onImportPresets} 
-                style={{ display: 'none' }} 
+                type="file"
+                accept=".json"
+                onChange={onImportPresets}
+                style={{ display: 'none' }}
               />
               <div style={{ display: 'flex', gap: '4px' }}>
                 <Tooltip text="Export all saved presets as JSON">
-                  <Button 
-                    onClick={onExportPresets} 
+                  <Button
+                    onClick={onExportPresets}
                     style={{ flex: 1, fontSize: '9px', opacity: Object.keys(customPresets).length > 0 ? 1 : 0.4 }}
                   >
                     EXPORT
                   </Button>
                 </Tooltip>
                 <Tooltip text="Import presets from JSON file">
-                  <Button 
-                    onClick={() => presetImportRef.current?.click()} 
+                  <Button
+                    onClick={() => presetImportRef.current?.click()}
                     style={{ flex: 1, fontSize: '9px' }}
                   >
                     IMPORT
@@ -258,91 +258,91 @@ export default function ProjectPropertiesPanel({
 
         {/* Analog Effects Section */}
         <SectionHeader title="ANALOG EFFECTS" />
-        
+
         <div style={{ marginBottom: '16px' }}>
-          <Button 
-            onClick={() => onInkBleedChange(!inkBleed)} 
-            active={inkBleed} 
+          <Button
+            onClick={() => onInkBleedChange(!inkBleed)}
+            active={inkBleed}
             style={{ marginBottom: inkBleed ? '12px' : '0' }}
           >
             INK BLEED
           </Button>
           {inkBleed && (
             <>
-              <Slider 
-                label={`SPREAD ${Math.round(inkBleedAmount * 100)}%`} 
-                value={inkBleedAmount} 
-                min={0.1} 
-                max={1} 
-                step={0.05} 
-                onChange={onInkBleedAmountChange} 
+              <Slider
+                label={`SPREAD ${Math.round(inkBleedAmount * 100)}%`}
+                value={inkBleedAmount}
+                min={0.1}
+                max={1}
+                step={0.05}
+                onChange={onInkBleedAmountChange}
               />
-              <Slider 
-                label={`ROUGHNESSS ${Math.round(inkBleedRoughness * 100)}%`} 
-                value={inkBleedRoughness} 
-                min={0} 
-                max={1} 
-                step={0.05} 
-                onChange={onInkBleedRoughnessChange} 
+              <Slider
+                label={`ROUGHNESSS ${Math.round(inkBleedRoughness * 100)}%`}
+                value={inkBleedRoughness}
+                min={0}
+                max={1}
+                step={0.05}
+                onChange={onInkBleedRoughnessChange}
               />
             </>
           )}
         </div>
-        
+
         <Button onClick={() => onPaperTextureChange(!paperTexture)} active={paperTexture}>
           PAPER MODE
         </Button>
       </div>
 
       {/* Fixed Bottom Export Section */}
-      <div style={{ 
+      <div style={{
         flexShrink: 0,
-        borderTop: '1px solid #222', 
+        borderTop: '1px solid #222',
         padding: '16px',
         backgroundColor: '#000'
       }}>
         <SectionHeader title="EXPORT" />
-        
+
         {/* Background Color Label */}
-        <label style={{ 
-          display: 'block', 
-          color: '#666', 
-          fontSize: '10px', 
-          marginBottom: '8px', 
+        <label style={{
+          display: 'block',
+          color: '#666',
+          fontSize: '10px',
+          marginBottom: '8px',
           fontFamily: 'monospace',
           letterSpacing: '0.05em'
         }}>
           BACKGROUND
         </label>
-        
-        {/* Palette colors - 4 columns */}
-        <div 
-          style={{ 
-          display: 'grid', 
-          gridTemplateColumns: 'repeat(4, 1fr)', 
-          gap: '6px', 
-          marginBottom: '6px'
-        }}>
+
+        {/* Palette colors - 4 columns - pass key so background follows palette changes */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, 1fr)',
+            gap: '6px',
+            marginBottom: '6px'
+          }}>
           {colorKeys.map((key) => (
             <ColorSwatch
               key={key}
               color={palette[key]?.hex || '#000000'}
               selected={backgroundColor === palette[key]?.hex}
-              onClick={() => onBackgroundColorChange(palette[key]?.hex)}
+              onClick={() => onBackgroundColorChange(key)}
               size="100%"
               style={{ aspectRatio: '1', maxHeight: '32px' }}
             />
           ))}
         </div>
-        
+
         {/* Black & White - 2 columns, full width */}
-        <div 
-          style={{ 
-          display: 'grid', 
-          gridTemplateColumns: 'repeat(2, 1fr)', 
-          gap: '6px',
-          marginBottom: '16px'
-        }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, 1fr)',
+            gap: '6px',
+            marginBottom: '16px'
+          }}>
           <ColorSwatch
             color="#000000"
             selected={backgroundColor === '#000000'}
@@ -358,19 +358,19 @@ export default function ProjectPropertiesPanel({
             style={{ aspectRatio: '2.5', maxHeight: '32px' }}
           />
         </div>
-        
+
         {/* Resolution Label */}
-        <label style={{ 
-          display: 'block', 
-          color: '#666', 
-          fontSize: '10px', 
-          marginBottom: '8px', 
+        <label style={{
+          display: 'block',
+          color: '#666',
+          fontSize: '10px',
+          marginBottom: '8px',
           fontFamily: 'monospace',
           letterSpacing: '0.05em'
         }}>
           RESOLUTION
         </label>
-        
+
         {/* Resolution Selectors */}
         <div style={{ display: 'flex', gap: '6px', marginBottom: '12px' }}>
           {Object.entries(EXPORT_RESOLUTIONS).map(([key, { label }]) => (
@@ -383,32 +383,32 @@ export default function ProjectPropertiesPanel({
             </SelectorButton>
           ))}
         </div>
-        
+
         {/* Export PNG Button */}
-        <Button 
-          primary 
-          onClick={onExportPNG} 
+        <Button
+          primary
+          onClick={onExportPNG}
           disabled={!hasImage}
-          style={{ 
+          style={{
             marginBottom: '16px',
             opacity: hasImage ? 1 : 0.4
           }}
         >
           EXPORT PNG
         </Button>
-        
+
         {/* SVG Export Label */}
-        <label style={{ 
-          display: 'block', 
-          color: '#666', 
-          fontSize: '10px', 
-          marginBottom: '8px', 
+        <label style={{
+          display: 'block',
+          color: '#666',
+          fontSize: '10px',
+          marginBottom: '8px',
           fontFamily: 'monospace',
           letterSpacing: '0.05em'
         }}>
           SVG EXPORT
         </label>
-        
+
         {/* SVG Mode Selectors */}
         <div style={{ display: 'flex', gap: '6px', marginBottom: '12px' }}>
           <SelectorButton
@@ -424,9 +424,9 @@ export default function ProjectPropertiesPanel({
             SEPARATE LAYERS (ZIP)
           </SelectorButton>
         </div>
-        
+
         {/* Export SVG Button */}
-        <Button 
+        <Button
           onClick={svgMode === 'single' ? onExportSVGCombined : onExportSVGLayers}
           disabled={!hasImage}
           style={{ opacity: hasImage ? 1 : 0.4 }}

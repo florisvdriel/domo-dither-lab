@@ -33,7 +33,8 @@ export default function HalftoneLab() {
   const [image, setImage] = useState(null);
   const [previewImage, setPreviewImage] = useState(null); // Downscaled for performance
   const [imageScale, setImageScale] = useState(DEFAULT_STATE.imageScale);
-  const [backgroundColor, setBackgroundColor] = useState(DEFAULT_STATE.backgroundColor);
+  const [backgroundColorRaw, setBackgroundColorRaw] = useState(DEFAULT_STATE.backgroundColor);
+  const [backgroundColorKey, setBackgroundColorKey] = useState(null); // null = use raw hex, otherwise use palette key
   const [exportResolution, setExportResolution] = useState(DEFAULT_STATE.exportResolution);
 
   const [brightness, setBrightness] = useState(DEFAULT_STATE.brightness);
@@ -106,6 +107,38 @@ export default function HalftoneLab() {
   }, [palette]);
 
   const colorKeys = Object.keys(activePalette).filter(k => !['white', 'black'].includes(k));
+
+  // Computed backgroundColor - follows palette if using a key, otherwise uses raw hex
+  const backgroundColor = useMemo(() => {
+    if (backgroundColorKey && activePalette[backgroundColorKey]) {
+      return activePalette[backgroundColorKey].hex;
+    }
+    return backgroundColorRaw;
+  }, [backgroundColorKey, activePalette, backgroundColorRaw]);
+
+  // Smart setter for background color - detects if it's a palette key or raw hex
+  const setBackgroundColor = useCallback((colorOrKey) => {
+    // Check if it's a palette key
+    if (activePalette[colorOrKey]) {
+      setBackgroundColorKey(colorOrKey);
+      setBackgroundColorRaw(activePalette[colorOrKey].hex);
+    } else if (colorOrKey === '#000000' || colorOrKey === '#FFFFFF' || colorOrKey === '#ffffff') {
+      // Neutrals - use raw hex, clear key
+      setBackgroundColorKey(null);
+      setBackgroundColorRaw(colorOrKey.toUpperCase());
+    } else {
+      // Check if the hex matches any palette color - if so, link to that key
+      const matchingKey = Object.keys(activePalette).find(
+        k => activePalette[k]?.hex?.toUpperCase() === colorOrKey?.toUpperCase()
+      );
+      if (matchingKey && matchingKey !== 'white' && matchingKey !== 'black') {
+        setBackgroundColorKey(matchingKey);
+      } else {
+        setBackgroundColorKey(null);
+      }
+      setBackgroundColorRaw(colorOrKey);
+    }
+  }, [activePalette]);
 
   // Get the currently selected layer (if any)
   const selectedLayer = useMemo(() => {
@@ -198,7 +231,8 @@ export default function HalftoneLab() {
     setInkBleedAmount(DEFAULT_STATE.inkBleedAmount);
     setInkBleedRoughness(DEFAULT_STATE.inkBleedRoughness);
     setPaperTexture(DEFAULT_STATE.paperTexture);
-    setBackgroundColor(DEFAULT_STATE.backgroundColor);
+    setBackgroundColorRaw(DEFAULT_STATE.backgroundColor);
+    setBackgroundColorKey(null);
     setExportResolution(DEFAULT_STATE.exportResolution);
     setViewportSize(DEFAULT_STATE.viewportSize);
     setImageTransform(DEFAULT_STATE.imageTransform);

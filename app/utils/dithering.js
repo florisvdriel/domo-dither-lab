@@ -3,7 +3,7 @@ import { getGray, BAYER_2x2, BAYER_4x4, BAYER_8x8, BLUE_NOISE_64, GRAY_R, GRAY_G
 // Dithering Algorithms
 export const ditherAlgorithms = {
   none: (imageData) => imageData,
-  
+
   bayer2x2: (imageData, threshold, scale = 1) => {
     const data = new Uint8ClampedArray(imageData.data);
     const w = imageData.width, h = imageData.height;
@@ -12,7 +12,7 @@ export const ditherAlgorithms = {
     const thresholdOffset = (threshold - 0.5) * 0.8;
     const pixelScale = Math.max(1, Math.floor(scale));
     const invPixelScale = 1 / pixelScale;
-    
+
     for (let y = 0; y < h; y++) {
       const yw = y * w;
       const my = Math.floor(y * invPixelScale) % size;
@@ -21,7 +21,7 @@ export const ditherAlgorithms = {
         const gray = getGray(data, i);
         const mx = Math.floor(x * invPixelScale) % size;
         const result = gray > (matrix[my][mx] + thresholdOffset) ? 255 : 0;
-        data[i] = data[i+1] = data[i+2] = result;
+        data[i] = data[i + 1] = data[i + 2] = result;
       }
     }
     return new ImageData(data, w, h);
@@ -35,7 +35,7 @@ export const ditherAlgorithms = {
     const thresholdOffset = (threshold - 0.5) * 0.8;
     const pixelScale = Math.max(1, Math.floor(scale));
     const invPixelScale = 1 / pixelScale;
-    
+
     for (let y = 0; y < h; y++) {
       const yw = y * w;
       const my = Math.floor(y * invPixelScale) % size;
@@ -44,7 +44,7 @@ export const ditherAlgorithms = {
         const gray = getGray(data, i);
         const mx = Math.floor(x * invPixelScale) % size;
         const result = gray > (matrix[my][mx] + thresholdOffset) ? 255 : 0;
-        data[i] = data[i+1] = data[i+2] = result;
+        data[i] = data[i + 1] = data[i + 2] = result;
       }
     }
     return new ImageData(data, w, h);
@@ -58,7 +58,7 @@ export const ditherAlgorithms = {
     const thresholdOffset = (threshold - 0.5) * 0.8;
     const pixelScale = Math.max(1, Math.floor(scale));
     const invPixelScale = 1 / pixelScale;
-    
+
     for (let y = 0; y < h; y++) {
       const yw = y * w;
       const my = Math.floor(y * invPixelScale) % size;
@@ -67,7 +67,7 @@ export const ditherAlgorithms = {
         const gray = getGray(data, i);
         const mx = Math.floor(x * invPixelScale) % size;
         const result = gray > (matrix[my][mx] + thresholdOffset) ? 255 : 0;
-        data[i] = data[i+1] = data[i+2] = result;
+        data[i] = data[i + 1] = data[i + 2] = result;
       }
     }
     return new ImageData(data, w, h);
@@ -79,11 +79,11 @@ export const ditherAlgorithms = {
     const pixelScale = Math.max(1, Math.floor(scale));
     const thresh = 80 + threshold * 100;
     const invPixelScale = 1 / pixelScale;
-    
+
     const sw = Math.ceil(w * invPixelScale);
     const sh = Math.ceil(h * invPixelScale);
     const gray = new Float32Array(sw * sh);
-    
+
     // Pre-calculate pixel bounds for sampling
     for (let sy = 0; sy < sh; sy++) {
       const syStart = sy * pixelScale;
@@ -97,20 +97,20 @@ export const ditherAlgorithms = {
           const dyw = dy * w;
           for (let dx = sxStart; dx < sxEnd; dx++) {
             const idx = (dyw + dx) * 4;
-            sum += data[idx] * GRAY_R + data[idx+1] * GRAY_G + data[idx+2] * GRAY_B;
+            sum += data[idx] * GRAY_R + data[idx + 1] * GRAY_G + data[idx + 2] * GRAY_B;
             count++;
           }
         }
         gray[syw + sx] = count > 0 ? sum / count : 0;
       }
     }
-    
+
     // Error diffusion
     const error7_16 = 7 / 16;
     const error3_16 = 3 / 16;
     const error5_16 = 5 / 16;
     const error1_16 = 1 / 16;
-    
+
     for (let y = 0; y < sh; y++) {
       const yw = y * sw;
       for (let x = 0; x < sw; x++) {
@@ -128,7 +128,7 @@ export const ditherAlgorithms = {
         }
       }
     }
-    
+
     // Map back to full resolution
     for (let y = 0; y < h; y++) {
       const sy = Math.floor(y * invPixelScale);
@@ -137,7 +137,7 @@ export const ditherAlgorithms = {
         const sx = Math.floor(x * invPixelScale);
         const val = gray[sy * sw + sx] > 127 ? 255 : 0;
         const idx = (yw + x) * 4;
-        data[idx] = data[idx+1] = data[idx+2] = val;
+        data[idx] = data[idx + 1] = data[idx + 2] = val;
       }
     }
     return new ImageData(data, w, h);
@@ -149,11 +149,11 @@ export const ditherAlgorithms = {
     const pixelScale = Math.max(1, Math.floor(scale));
     const thresh = 80 + threshold * 100;
     const invPixelScale = 1 / pixelScale;
-    
+
     const sw = Math.ceil(w * invPixelScale);
     const sh = Math.ceil(h * invPixelScale);
     const gray = new Float32Array(sw * sh);
-    
+
     // Pre-calculate pixel bounds for sampling
     for (let sy = 0; sy < sh; sy++) {
       const syStart = sy * pixelScale;
@@ -167,14 +167,14 @@ export const ditherAlgorithms = {
           const dyw = dy * w;
           for (let dx = sxStart; dx < sxEnd; dx++) {
             const idx = (dyw + dx) * 4;
-            sum += data[idx] * GRAY_R + data[idx+1] * GRAY_G + data[idx+2] * GRAY_B;
+            sum += data[idx] * GRAY_R + data[idx + 1] * GRAY_G + data[idx + 2] * GRAY_B;
             count++;
           }
         }
         gray[syw + sx] = count > 0 ? sum / count : 0;
       }
     }
-    
+
     // Error diffusion (Atkinson)
     const errorDiv = 1 / 8;
     for (let y = 0; y < sh; y++) {
@@ -196,7 +196,7 @@ export const ditherAlgorithms = {
         if (y + 2 < sh) gray[i + sw * 2] += error;
       }
     }
-    
+
     // Map back to full resolution
     for (let y = 0; y < h; y++) {
       const sy = Math.floor(y * invPixelScale);
@@ -205,7 +205,7 @@ export const ditherAlgorithms = {
         const sx = Math.floor(x * invPixelScale);
         const val = gray[sy * sw + sx] > 127 ? 255 : 0;
         const idx = (yw + x) * 4;
-        data[idx] = data[idx+1] = data[idx+2] = val;
+        data[idx] = data[idx + 1] = data[idx + 2] = val;
       }
     }
     return new ImageData(data, w, h);
@@ -215,55 +215,53 @@ export const ditherAlgorithms = {
     const data = new Uint8ClampedArray(imageData.data);
     const w = imageData.width, h = imageData.height;
     data.fill(255);
-    
+
     const step = Math.max(3, Math.floor(dotSize));
     const maxRadius = step * 0.48;
     const rad = (angle * Math.PI) * (1 / 180);
     const cos = Math.cos(rad), sin = Math.sin(rad);
     const radiusMultiplier = maxRadius * (0.6 + threshold * 0.7);
     const radiusThreshold = 0.5;
-    const radiusPadding = 0.7;
+    const edgeSmooth = 0.5; // Reduced from 0.7 for crisper but still smooth edges
     const wHalf = w * 0.5;
     const hHalf = h * 0.5;
-    
+
     // OPTIMIZED: Calculate tight grid bounds based on rotated canvas corners
-    // The grid only needs to cover points that could possibly affect visible pixels
     const diagonal = Math.sqrt(w * w + h * h);
-    const gridExtent = diagonal * 0.6; // ~1.2x coverage instead of 4x
-    
+    const gridExtent = diagonal * 0.6;
+
     // Pre-calculate bounds for grid iteration
     const minGridX = Math.floor(-gridExtent / step) * step;
     const maxGridX = Math.ceil(gridExtent / step) * step;
     const minGridY = Math.floor(-gridExtent / step) * step;
     const maxGridY = Math.ceil(gridExtent / step) * step;
-    
+
     for (let gy = minGridY; gy <= maxGridY; gy += step) {
       for (let gx = minGridX; gx <= maxGridX; gx += step) {
         const cx = gx * cos - gy * sin + wHalf;
         const cy = gx * sin + gy * cos + hHalf;
-        
+
         // Early bounds check
         if (cx < -step || cx >= w + step || cy < -step || cy >= h + step) continue;
-        
+
         const sampleX = Math.max(0, Math.min(w - 1, Math.round(cx)));
         const sampleY = Math.max(0, Math.min(h - 1, Math.round(cy)));
         const si = (sampleY * w + sampleX) * 4;
         const gray = getGray(imageData.data, si);
-        
+
         const darkness = 1 - gray;
         const radius = Math.sqrt(darkness) * radiusMultiplier;
-        
+
         if (radius < radiusThreshold) continue;
-        
-        const radiusWithPadding = radius + radiusPadding;
-        const minX = Math.max(0, Math.floor(cx - radiusWithPadding));
-        const maxX = Math.min(w - 1, Math.ceil(cx + radiusWithPadding));
-        const minY = Math.max(0, Math.floor(cy - radiusWithPadding));
-        const maxY = Math.min(h - 1, Math.ceil(cy + radiusWithPadding));
-        
-        // Pre-calculate radius squared to avoid sqrt in inner loop
-        const radiusSq = radiusWithPadding * radiusWithPadding;
-        
+
+        const radiusWithSmooth = radius + edgeSmooth;
+        const minX = Math.max(0, Math.floor(cx - radiusWithSmooth));
+        const maxX = Math.min(w - 1, Math.ceil(cx + radiusWithSmooth));
+        const minY = Math.max(0, Math.floor(cy - radiusWithSmooth));
+        const maxY = Math.min(h - 1, Math.ceil(cy + radiusWithSmooth));
+
+        const radiusSq = radiusWithSmooth * radiusWithSmooth;
+
         for (let py = minY; py <= maxY; py++) {
           const dy = py - cy;
           const dySq = dy * dy;
@@ -271,15 +269,16 @@ export const ditherAlgorithms = {
           for (let px = minX; px <= maxX; px++) {
             const dx = px - cx;
             const distSq = dx * dx + dySq;
-            
+
             if (distSq <= radiusSq) {
               const dist = Math.sqrt(distSq);
               const i = (pyw + px) * 4;
-              const coverage = Math.max(0, Math.min(1, radius - dist + radiusPadding));
+              // Smoother edge transition
+              const coverage = Math.max(0, Math.min(1, radius - dist + edgeSmooth));
               const newVal = Math.round(255 * (1 - coverage));
               const current = data[i];
               if (newVal < current) {
-                data[i] = data[i+1] = data[i+2] = newVal;
+                data[i] = data[i + 1] = data[i + 2] = newVal;
               }
             }
           }
@@ -293,35 +292,35 @@ export const ditherAlgorithms = {
     const data = new Uint8ClampedArray(imageData.data);
     const w = imageData.width, h = imageData.height;
     data.fill(255);
-    
+
     const rad = (angle * Math.PI) * (1 / 180);
     const cos = Math.cos(rad), sin = Math.sin(rad);
     const spacing = Math.max(3, lineSpacing);
     const maxWidth = spacing * 0.7;
     const widthMultiplier = maxWidth * (0.5 + threshold * 0.7);
     const spacingHalf = spacing * 0.5;
-    const padding = 0.7;
-    
+    const edgeSmooth = 0.5; // Reduced from 0.7 for crisper but still smooth edges
+
     for (let y = 0; y < h; y++) {
       const yw = y * w;
       const ySin = y * sin;
       for (let x = 0; x < w; x++) {
         const i = (yw + x) * 4;
         const gray = getGray(imageData.data, i);
-        
+
         const rx = x * cos + ySin;
         const linePos = ((rx % spacing) + spacing) % spacing;
         const centerDist = Math.abs(linePos - spacingHalf);
-        
+
         const darkness = 1 - gray;
         const lineWidth = Math.sqrt(darkness) * widthMultiplier;
         const halfWidth = lineWidth * 0.5;
-        const thresholdDist = halfWidth + padding;
-        
+        const thresholdDist = halfWidth + edgeSmooth;
+
         if (centerDist <= thresholdDist) {
-          const coverage = Math.max(0, Math.min(1, halfWidth - centerDist + padding));
+          const coverage = Math.max(0, Math.min(1, halfWidth - centerDist + edgeSmooth));
           const val = Math.round(255 * (1 - coverage));
-          data[i] = data[i+1] = data[i+2] = val;
+          data[i] = data[i + 1] = data[i + 2] = val;
         }
       }
     }
@@ -332,52 +331,52 @@ export const ditherAlgorithms = {
     const data = new Uint8ClampedArray(imageData.data);
     const w = imageData.width, h = imageData.height;
     data.fill(255);
-    
+
     const step = Math.max(3, Math.floor(size));
     const maxSize = step * 0.85;
     const rad = (angle * Math.PI) * (1 / 180);
     const cos = Math.cos(rad), sin = Math.sin(rad);
     const sizeMultiplier = maxSize * (0.4 + threshold * 0.6) * 0.5;
-    const padding = 0.7;
+    const edgeSmooth = 0.5; // Reduced from 0.7 for crisper but still smooth edges
     const wHalf = w * 0.5;
     const hHalf = h * 0.5;
-    
+
     // OPTIMIZED: Calculate tight grid bounds based on rotated canvas corners
     const diagonal = Math.sqrt(w * w + h * h);
-    const gridExtent = diagonal * 0.6; // ~1.2x coverage instead of 4x
-    
+    const gridExtent = diagonal * 0.6;
+
     // Pre-calculate bounds for grid iteration
     const minGridX = Math.floor(-gridExtent / step) * step;
     const maxGridX = Math.ceil(gridExtent / step) * step;
     const minGridY = Math.floor(-gridExtent / step) * step;
     const maxGridY = Math.ceil(gridExtent / step) * step;
-    
+
     for (let gy = minGridY; gy <= maxGridY; gy += step) {
       for (let gx = minGridX; gx <= maxGridX; gx += step) {
         const cx = gx * cos - gy * sin + wHalf;
         const cy = gx * sin + gy * cos + hHalf;
-        
+
         if (cx < -step || cx >= w + step || cy < -step || cy >= h + step) continue;
-        
+
         const sampleX = Math.max(0, Math.min(w - 1, Math.round(cx)));
         const sampleY = Math.max(0, Math.min(h - 1, Math.round(cy)));
         const si = (sampleY * w + sampleX) * 4;
         const gray = getGray(imageData.data, si);
-        
+
         const darkness = 1 - gray;
         const squareHalf = Math.sqrt(darkness) * sizeMultiplier;
-        
+
         if (squareHalf < 0.3) continue;
-        
-        const extent = squareHalf + 1;
+
+        const extent = squareHalf + edgeSmooth;
         const minX = Math.max(0, Math.floor(cx - extent));
         const maxX = Math.min(w - 1, Math.ceil(cx + extent));
         const minY = Math.max(0, Math.floor(cy - extent));
         const maxY = Math.min(h - 1, Math.ceil(cy + extent));
-        
+
         // Pre-calculate rotated basis vectors
         const negSin = -sin;
-        
+
         for (let py = minY; py <= maxY; py++) {
           const dy = py - cy;
           const dyCos = dy * cos;
@@ -387,18 +386,18 @@ export const ditherAlgorithms = {
             const dx = px - cx;
             const rdx = dx * cos + dySin;
             const rdy = dx * negSin + dyCos;
-            
+
             const distX = Math.abs(rdx) - squareHalf;
             const distY = Math.abs(rdy) - squareHalf;
             const dist = Math.max(distX, distY);
-            
-            if (dist < padding) {
+
+            if (dist < edgeSmooth) {
               const i = (pyw + px) * 4;
-              const coverage = Math.max(0, Math.min(1, -dist + padding));
+              const coverage = Math.max(0, Math.min(1, -dist + edgeSmooth));
               const newVal = Math.round(255 * (1 - coverage));
               const current = data[i];
               if (newVal < current) {
-                data[i] = data[i+1] = data[i+2] = newVal;
+                data[i] = data[i + 1] = data[i + 2] = newVal;
               }
             }
           }
@@ -416,7 +415,7 @@ export const ditherAlgorithms = {
     const noiseAmount = 0.25;
     const invPixelScale = 1 / pixelScale;
     const sw = Math.ceil(w * invPixelScale);
-    
+
     for (let y = 0; y < h; y++) {
       const sy = Math.floor(y * invPixelScale);
       const yw = y * w;
@@ -427,7 +426,7 @@ export const ditherAlgorithms = {
         const noise = seededRandom(sy * sw + sx + 0.5);
         const adjustedThreshold = decisionThreshold + (noise - 0.5) * noiseAmount;
         const result = gray > adjustedThreshold ? 255 : 0;
-        data[i] = data[i+1] = data[i+2] = result;
+        data[i] = data[i + 1] = data[i + 2] = result;
       }
     }
     return new ImageData(data, w, h);
@@ -440,7 +439,7 @@ export const ditherAlgorithms = {
     const pixelScale = Math.max(1, Math.floor(scale));
     const thresholdOffset = (threshold - 0.5) * 0.8;
     const invPixelScale = 1 / pixelScale;
-    
+
     for (let y = 0; y < h; y++) {
       const yw = y * w;
       const my = Math.floor(y * invPixelScale) % 64;
@@ -450,7 +449,7 @@ export const ditherAlgorithms = {
         const mx = Math.floor(x * invPixelScale) % 64;
         const blueNoiseValue = BLUE_NOISE_64[my][mx];
         const result = gray > (blueNoiseValue + thresholdOffset) ? 255 : 0;
-        data[i] = data[i+1] = data[i+2] = result;
+        data[i] = data[i + 1] = data[i + 2] = result;
       }
     }
     return new ImageData(data, w, h);
@@ -463,11 +462,11 @@ export const ditherAlgorithms = {
     const pixelScale = Math.max(1, Math.floor(scale));
     const thresh = 80 + threshold * 100;
     const invPixelScale = 1 / pixelScale;
-    
+
     const sw = Math.ceil(w * invPixelScale);
     const sh = Math.ceil(h * invPixelScale);
     const gray = new Float32Array(sw * sh);
-    
+
     // Sample to scaled resolution
     for (let sy = 0; sy < sh; sy++) {
       const syStart = sy * pixelScale;
@@ -481,20 +480,20 @@ export const ditherAlgorithms = {
           const dyw = dy * w;
           for (let dx = sxStart; dx < sxEnd; dx++) {
             const idx = (dyw + dx) * 4;
-            sum += data[idx] * GRAY_R + data[idx+1] * GRAY_G + data[idx+2] * GRAY_B;
+            sum += data[idx] * GRAY_R + data[idx + 1] * GRAY_G + data[idx + 2] * GRAY_B;
             count++;
           }
         }
         gray[syw + sx] = count > 0 ? sum / count : 0;
       }
     }
-    
+
     // Stucki kernel (÷42):
     //     *  8  4
     // 2  4  8  4  2
     // 1  2  4  2  1
     const div = 1 / 42;
-    
+
     for (let y = 0; y < sh; y++) {
       const yw = y * sw;
       for (let x = 0; x < sw; x++) {
@@ -503,7 +502,7 @@ export const ditherAlgorithms = {
         const newPixel = oldPixel > thresh ? 255 : 0;
         gray[i] = newPixel;
         const error = (oldPixel - newPixel) * div;
-        
+
         // Row 0
         if (x + 1 < sw) gray[i + 1] += error * 8;
         if (x + 2 < sw) gray[i + 2] += error * 4;
@@ -527,7 +526,7 @@ export const ditherAlgorithms = {
         }
       }
     }
-    
+
     // Map back to full resolution
     for (let y = 0; y < h; y++) {
       const sy = Math.floor(y * invPixelScale);
@@ -536,7 +535,7 @@ export const ditherAlgorithms = {
         const sx = Math.floor(x * invPixelScale);
         const val = gray[sy * sw + sx] > 127 ? 255 : 0;
         const idx = (yw + x) * 4;
-        data[idx] = data[idx+1] = data[idx+2] = val;
+        data[idx] = data[idx + 1] = data[idx + 2] = val;
       }
     }
     return new ImageData(data, w, h);
@@ -549,11 +548,11 @@ export const ditherAlgorithms = {
     const pixelScale = Math.max(1, Math.floor(scale));
     const thresh = 80 + threshold * 100;
     const invPixelScale = 1 / pixelScale;
-    
+
     const sw = Math.ceil(w * invPixelScale);
     const sh = Math.ceil(h * invPixelScale);
     const gray = new Float32Array(sw * sh);
-    
+
     // Sample to scaled resolution
     for (let sy = 0; sy < sh; sy++) {
       const syStart = sy * pixelScale;
@@ -567,20 +566,20 @@ export const ditherAlgorithms = {
           const dyw = dy * w;
           for (let dx = sxStart; dx < sxEnd; dx++) {
             const idx = (dyw + dx) * 4;
-            sum += data[idx] * GRAY_R + data[idx+1] * GRAY_G + data[idx+2] * GRAY_B;
+            sum += data[idx] * GRAY_R + data[idx + 1] * GRAY_G + data[idx + 2] * GRAY_B;
             count++;
           }
         }
         gray[syw + sx] = count > 0 ? sum / count : 0;
       }
     }
-    
+
     // Sierra kernel (÷32):
     //     *  5  3
     // 2  4  5  4  2
     //    2  3  2
     const div = 1 / 32;
-    
+
     for (let y = 0; y < sh; y++) {
       const yw = y * sw;
       for (let x = 0; x < sw; x++) {
@@ -589,7 +588,7 @@ export const ditherAlgorithms = {
         const newPixel = oldPixel > thresh ? 255 : 0;
         gray[i] = newPixel;
         const error = (oldPixel - newPixel) * div;
-        
+
         // Row 0
         if (x + 1 < sw) gray[i + 1] += error * 5;
         if (x + 2 < sw) gray[i + 2] += error * 3;
@@ -611,7 +610,7 @@ export const ditherAlgorithms = {
         }
       }
     }
-    
+
     // Map back to full resolution
     for (let y = 0; y < h; y++) {
       const sy = Math.floor(y * invPixelScale);
@@ -620,7 +619,7 @@ export const ditherAlgorithms = {
         const sx = Math.floor(x * invPixelScale);
         const val = gray[sy * sw + sx] > 127 ? 255 : 0;
         const idx = (yw + x) * 4;
-        data[idx] = data[idx+1] = data[idx+2] = val;
+        data[idx] = data[idx + 1] = data[idx + 2] = val;
       }
     }
     return new ImageData(data, w, h);
@@ -633,11 +632,11 @@ export const ditherAlgorithms = {
     const pixelScale = Math.max(1, Math.floor(scale));
     const thresh = 80 + threshold * 100;
     const invPixelScale = 1 / pixelScale;
-    
+
     const sw = Math.ceil(w * invPixelScale);
     const sh = Math.ceil(h * invPixelScale);
     const gray = new Float32Array(sw * sh);
-    
+
     // Sample to scaled resolution
     for (let sy = 0; sy < sh; sy++) {
       const syStart = sy * pixelScale;
@@ -651,19 +650,19 @@ export const ditherAlgorithms = {
           const dyw = dy * w;
           for (let dx = sxStart; dx < sxEnd; dx++) {
             const idx = (dyw + dx) * 4;
-            sum += data[idx] * GRAY_R + data[idx+1] * GRAY_G + data[idx+2] * GRAY_B;
+            sum += data[idx] * GRAY_R + data[idx + 1] * GRAY_G + data[idx + 2] * GRAY_B;
             count++;
           }
         }
         gray[syw + sx] = count > 0 ? sum / count : 0;
       }
     }
-    
+
     // Sierra Two-Row kernel (÷16):
     //     *  4  3
     // 1  2  3  2  1
     const div = 1 / 16;
-    
+
     for (let y = 0; y < sh; y++) {
       const yw = y * sw;
       for (let x = 0; x < sw; x++) {
@@ -672,7 +671,7 @@ export const ditherAlgorithms = {
         const newPixel = oldPixel > thresh ? 255 : 0;
         gray[i] = newPixel;
         const error = (oldPixel - newPixel) * div;
-        
+
         // Row 0
         if (x + 1 < sw) gray[i + 1] += error * 4;
         if (x + 2 < sw) gray[i + 2] += error * 3;
@@ -687,7 +686,7 @@ export const ditherAlgorithms = {
         }
       }
     }
-    
+
     // Map back to full resolution
     for (let y = 0; y < h; y++) {
       const sy = Math.floor(y * invPixelScale);
@@ -696,7 +695,7 @@ export const ditherAlgorithms = {
         const sx = Math.floor(x * invPixelScale);
         const val = gray[sy * sw + sx] > 127 ? 255 : 0;
         const idx = (yw + x) * 4;
-        data[idx] = data[idx+1] = data[idx+2] = val;
+        data[idx] = data[idx + 1] = data[idx + 2] = val;
       }
     }
     return new ImageData(data, w, h);
@@ -709,11 +708,11 @@ export const ditherAlgorithms = {
     const pixelScale = Math.max(1, Math.floor(scale));
     const thresh = 80 + threshold * 100;
     const invPixelScale = 1 / pixelScale;
-    
+
     const sw = Math.ceil(w * invPixelScale);
     const sh = Math.ceil(h * invPixelScale);
     const gray = new Float32Array(sw * sh);
-    
+
     // Sample to scaled resolution
     for (let sy = 0; sy < sh; sy++) {
       const syStart = sy * pixelScale;
@@ -727,19 +726,19 @@ export const ditherAlgorithms = {
           const dyw = dy * w;
           for (let dx = sxStart; dx < sxEnd; dx++) {
             const idx = (dyw + dx) * 4;
-            sum += data[idx] * GRAY_R + data[idx+1] * GRAY_G + data[idx+2] * GRAY_B;
+            sum += data[idx] * GRAY_R + data[idx + 1] * GRAY_G + data[idx + 2] * GRAY_B;
             count++;
           }
         }
         gray[syw + sx] = count > 0 ? sum / count : 0;
       }
     }
-    
+
     // Sierra Lite kernel (÷4):
     //     *  2
     // 1  1
     const div = 1 / 4;
-    
+
     for (let y = 0; y < sh; y++) {
       const yw = y * sw;
       for (let x = 0; x < sw; x++) {
@@ -748,7 +747,7 @@ export const ditherAlgorithms = {
         const newPixel = oldPixel > thresh ? 255 : 0;
         gray[i] = newPixel;
         const error = (oldPixel - newPixel) * div;
-        
+
         // Row 0
         if (x + 1 < sw) gray[i + 1] += error * 2;
         // Row 1
@@ -759,7 +758,7 @@ export const ditherAlgorithms = {
         }
       }
     }
-    
+
     // Map back to full resolution
     for (let y = 0; y < h; y++) {
       const sy = Math.floor(y * invPixelScale);
@@ -768,7 +767,7 @@ export const ditherAlgorithms = {
         const sx = Math.floor(x * invPixelScale);
         const val = gray[sy * sw + sx] > 127 ? 255 : 0;
         const idx = (yw + x) * 4;
-        data[idx] = data[idx+1] = data[idx+2] = val;
+        data[idx] = data[idx + 1] = data[idx + 2] = val;
       }
     }
     return new ImageData(data, w, h);
@@ -781,12 +780,12 @@ export const ditherAlgorithms = {
     const pixelScale = Math.max(1, Math.floor(scale));
     const thresh = 80 + threshold * 100;
     const invPixelScale = 1 / pixelScale;
-    
+
     const sw = Math.ceil(w * invPixelScale);
     const sh = Math.ceil(h * invPixelScale);
     const gray = new Float32Array(sw * sh);
     const output = new Uint8Array(sw * sh);
-    
+
     // Sample to scaled resolution
     for (let sy = 0; sy < sh; sy++) {
       const syStart = sy * pixelScale;
@@ -800,55 +799,55 @@ export const ditherAlgorithms = {
           const dyw = dy * w;
           for (let dx = sxStart; dx < sxEnd; dx++) {
             const idx = (dyw + dx) * 4;
-            sum += data[idx] * GRAY_R + data[idx+1] * GRAY_G + data[idx+2] * GRAY_B;
+            sum += data[idx] * GRAY_R + data[idx + 1] * GRAY_G + data[idx + 2] * GRAY_B;
             count++;
           }
         }
         gray[syw + sx] = count > 0 ? sum / count : 0;
       }
     }
-    
+
     // Generate Hilbert curve path
     const hilbertPath = generateHilbertPath(sw, sh);
-    
+
     // Error buffer for Riemersma (uses a queue of recent errors)
     const queueSize = 16;
     const errorQueue = new Float32Array(queueSize);
     const weights = new Float32Array(queueSize);
     let weightSum = 0;
-    
+
     // Calculate exponential weights (more recent = higher weight)
     for (let i = 0; i < queueSize; i++) {
       weights[i] = Math.pow(2, -i / 4);
       weightSum += weights[i];
     }
-    
+
     // Process pixels along Hilbert curve
     for (let p = 0; p < hilbertPath.length; p++) {
       const { x, y } = hilbertPath[p];
       if (x >= sw || y >= sh) continue;
-      
+
       const i = y * sw + x;
-      
+
       // Add accumulated error from queue
       let accError = 0;
       for (let q = 0; q < queueSize; q++) {
         accError += errorQueue[q] * weights[q];
       }
       accError /= weightSum;
-      
+
       const oldPixel = gray[i] + accError;
       const newPixel = oldPixel > thresh ? 255 : 0;
       output[i] = newPixel;
       const error = oldPixel - newPixel;
-      
+
       // Shift error queue and add new error
       for (let q = queueSize - 1; q > 0; q--) {
         errorQueue[q] = errorQueue[q - 1];
       }
       errorQueue[0] = error;
     }
-    
+
     // Map back to full resolution
     for (let y = 0; y < h; y++) {
       const sy = Math.floor(y * invPixelScale);
@@ -857,7 +856,7 @@ export const ditherAlgorithms = {
         const sx = Math.floor(x * invPixelScale);
         const val = output[sy * sw + sx];
         const idx = (yw + x) * 4;
-        data[idx] = data[idx+1] = data[idx+2] = val;
+        data[idx] = data[idx + 1] = data[idx + 2] = val;
       }
     }
     return new ImageData(data, w, h);
@@ -878,8 +877,8 @@ export const blendModes = {
     return result * alpha + base * (1 - alpha);
   },
   overlay: (base, blend, alpha) => {
-    const result = base < 128 
-      ? 2 * base * blend * INV_255 
+    const result = base < 128
+      ? 2 * base * blend * INV_255
       : 255 - 2 * (255 - base) * (255 - blend) * INV_255;
     return result * alpha + base * (1 - alpha);
   },

@@ -13,45 +13,45 @@ export default function BackgroundPropertiesPanel({
     <div>
       {/* Background Color Section */}
       <Section title="BACKGROUND COLOR" defaultOpen={true}>
-        <p style={{ 
-          fontSize: '9px', 
-          color: '#444', 
+        <p style={{
+          fontSize: '9px',
+          color: '#444',
           margin: '0 0 12px 0'
         }}>
           Select background color from palette
         </p>
-        
-        <div style={{ 
-          display: 'flex', 
-          gap: '8px', 
+
+        <div style={{
+          display: 'flex',
+          gap: '8px',
           marginBottom: '16px',
           flexWrap: 'wrap'
         }}>
-          {/* Palette colors */}
+          {/* Palette colors - pass key so background follows palette changes */}
           {colorKeys.map(key => (
             <ColorSwatch
               key={key}
               color={palette[key]?.hex || '#000000'}
               selected={backgroundColor === palette[key]?.hex}
-              onClick={() => onBackgroundColorChange(palette[key]?.hex)}
+              onClick={() => onBackgroundColorChange(key)}
               size={36}
             />
           ))}
         </div>
-        
+
         {/* Black and white options */}
-        <label style={{ 
-          display: 'block', 
-          color: '#666', 
-          fontSize: '10px', 
-          marginBottom: '8px', 
+        <label style={{
+          display: 'block',
+          color: '#666',
+          fontSize: '10px',
+          marginBottom: '8px',
           fontFamily: 'monospace',
           letterSpacing: '0.05em'
         }}>
           NEUTRALS
         </label>
-        <div style={{ 
-          display: 'flex', 
+        <div style={{
+          display: 'flex',
           gap: '8px'
         }}>
           <ColorSwatch
