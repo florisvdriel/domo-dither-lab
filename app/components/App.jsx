@@ -89,6 +89,7 @@ export default function HalftoneLab() {
   const canvasRef = useRef(null);
   const originalCanvasRef = useRef(null);
   const sourceCanvasRef = useRef(null);
+  const imageWrapperRef = useRef(null);
   const fileInputRef = useRef(null);
   const presetImportRef = useRef(null);
   const canvasContainerRef = useRef(null);
@@ -1119,7 +1120,25 @@ export default function HalftoneLab() {
       </div>
 
       {/* Canvas Area */}
-      <DropZone onDrop={loadImageFile} style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+      <DropZone
+        onDrop={loadImageFile}
+        style={{ flex: 1, display: 'flex', overflow: 'hidden' }}
+        onClick={(e) => {
+          // Click on canvas background (outside image) shows project properties
+          // We need to check if the click target is NOT the image or inside it
+          // BUT - the image wrapper is inside the container which is inside the DropZone.
+          // The DropZone covers everything.
+          // If we click the padding area (which is part of the inner div), e.target might be the inner div.
+          // If we click the DropZone itself (outside inner div due to flex), e.target is DropZone.
+
+          const isInsideImage = imageWrapperRef.current && imageWrapperRef.current.contains(e.target);
+          const isButton = e.target.closest('button') !== null;
+
+          if (!isInsideImage && !isButton) {
+            setSelection({ type: 'project', id: null });
+          }
+        }}
+      >
         <div
           ref={canvasContainerRef}
           style={{
@@ -1138,12 +1157,7 @@ export default function HalftoneLab() {
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
-          onClick={(e) => {
-            // Click on canvas background (outside image) shows project properties
-            if (e.target === canvasContainerRef.current) {
-              setSelection({ type: 'project', id: null });
-            }
-          }}
+        // Click handler moved to DropZone to cover full area
         >
           {/* Paper texture overlay - warm tint + noise */}
           {paperTexture && image && (
@@ -1223,12 +1237,15 @@ export default function HalftoneLab() {
               <p style={{ fontSize: '10px', letterSpacing: '0.1em' }}>UPLOAD OR DROP IMAGE</p>
             </div>
           ) : (
-            <div style={{
-              width: previewImage ? `${previewImage.width}px` : `${viewportSize.w}px`,
-              height: previewImage ? `${previewImage.height}px` : `${viewportSize.h}px`,
-              position: 'relative',
-              backgroundColor: '#111'
-            }}>
+            <div
+              ref={imageWrapperRef}
+              style={{
+                width: previewImage ? `${previewImage.width}px` : `${viewportSize.w}px`,
+                height: previewImage ? `${previewImage.height}px` : `${viewportSize.h}px`,
+                position: 'relative',
+                backgroundColor: '#111'
+              }}
+            >
               <div style={{
                 transform: `translate(${imageTransform.x}px, ${imageTransform.y}px) scale(${imageTransform.scale})`,
                 transformOrigin: 'center center',

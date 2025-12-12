@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 
-export default function DropZone({ onDrop, children, style = {} }) {
+export default function DropZone({ onDrop, children, style = {}, onClick }) {
   const [dragging, setDragging] = useState(false);
 
   const handleDragOver = (e) => {
@@ -20,7 +20,13 @@ export default function DropZone({ onDrop, children, style = {} }) {
   };
 
   return (
-    <div onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} style={{ position: 'relative', width: '100%', height: '100%', ...style }}>
+    <div
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      onClick={onClick}
+      style={{ position: 'relative', width: '100%', height: '100%', ...style }}
+    >
       {children}
       {dragging && (
         <div style={{

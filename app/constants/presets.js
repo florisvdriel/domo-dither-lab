@@ -53,9 +53,9 @@ export const PRESETS = {
     name: 'RGB SPLIT',
     description: 'Chromatic aberration effect',
     layers: [
-      { colorKey: 'coral', ditherType: 'halftoneCircle', threshold: 0.5, scale: 6, angle: 15, offsetX: -5, offsetY: 0, blendMode: 'screen', opacity: 1, visible: true },
-      { colorKey: 'teal', ditherType: 'halftoneCircle', threshold: 0.5, scale: 6, angle: 15, offsetX: 0, offsetY: 0, blendMode: 'screen', opacity: 1, visible: true },
-      { colorKey: 'plum', ditherType: 'halftoneCircle', threshold: 0.5, scale: 6, angle: 15, offsetX: 5, offsetY: 0, blendMode: 'screen', opacity: 1, visible: true }
+      { colorKey: 'coral', ditherType: 'halftoneCircle', threshold: 0.5, scale: 6, angle: 15, offsetX: -5, offsetY: 0, blendMode: 'multiply', opacity: 1, visible: true },
+      { colorKey: 'teal', ditherType: 'halftoneCircle', threshold: 0.5, scale: 6, angle: 15, offsetX: 0, offsetY: 0, blendMode: 'multiply', opacity: 1, visible: true },
+      { colorKey: 'plum', ditherType: 'halftoneCircle', threshold: 0.5, scale: 6, angle: 15, offsetX: 5, offsetY: 0, blendMode: 'multiply', opacity: 1, visible: true }
     ]
   }
 };
