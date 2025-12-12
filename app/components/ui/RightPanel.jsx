@@ -109,6 +109,7 @@ export default function RightPanel({
             backgroundColorKey={backgroundColorKey}
             palette={palette}
             colorKeys={colorKeys}
+            onUpdatePaletteColor={onUpdatePaletteColor}
           />
         );
       default:

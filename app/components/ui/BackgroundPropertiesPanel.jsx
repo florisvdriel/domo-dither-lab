@@ -8,7 +8,8 @@ export default function BackgroundPropertiesPanel({
   onBackgroundColorChange,
   backgroundColorKey,
   palette,
-  colorKeys
+  colorKeys,
+  onUpdatePaletteColor
 }) {
   return (
     <div>
@@ -27,9 +28,8 @@ export default function BackgroundPropertiesPanel({
             value={backgroundColorKey || backgroundColor}
             onChange={onBackgroundColorChange}
             palette={palette}
-            // Background panel doesn't support updating palette colors in-place currently
-            // or we could pass a handler if desired, but for now matching safe implementation
-            onUpdatePaletteColor={null}
+            // Pass onUpdatePaletteColor to allow editing palette colors from background panel
+            onUpdatePaletteColor={onUpdatePaletteColor}
           />
         </div>
 

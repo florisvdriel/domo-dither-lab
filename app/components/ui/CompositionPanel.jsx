@@ -50,7 +50,9 @@ export default function CompositionPanel({
   onRandomizePalette,
   activePalette,
   onToggleLayerLock,
-  onReorderLayers
+  onReorderLayers,
+  backgroundLocked = false,
+  onToggleBackgroundLock
 }) {
   const [sourceHovering, setSourceHovering] = useState(false);
   const [bgHovering, setBgHovering] = useState(false);
@@ -208,6 +210,29 @@ export default function CompositionPanel({
                 }}>
                   BACKGROUND
                 </span>
+
+                {/* Background Lock Toggle - Only show if callback provided */}
+                {onToggleBackgroundLock && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleBackgroundLock();
+                    }}
+                    title={backgroundLocked ? "Unlock background" : "Lock background"}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                      padding: '0 4px',
+                      color: backgroundLocked ? '#fff' : '#444',
+                      marginLeft: 'auto',
+                      lineHeight: 1
+                    }}
+                  >
+                    {backgroundLocked ? '🔒' : '🔓'}
+                  </button>
+                )}
               </div>
             </div>
           </div>

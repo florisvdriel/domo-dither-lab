@@ -81,6 +81,9 @@ export default function HalftoneLab() {
   // Locked colors - preserved during randomization
   const [lockedColors, setLockedColors] = useState(new Set());
 
+  // Feature 03: Background locked state
+  const [backgroundLocked, setBackgroundLocked] = useState(false);
+
   // Selection state for context-sensitive right panel
   // type: 'project' | 'source' | 'background' | 'layer'
   // id: layer.id when type === 'layer'
@@ -458,6 +461,10 @@ export default function HalftoneLab() {
     ));
   };
 
+  const toggleBackgroundLock = () => {
+    setBackgroundLocked(prev => !prev);
+  };
+
   const randomizePalette = () => {
     // Generate a random 8-color palette by combining two harmony types
     const harmonyTypes = ['tetradic', 'analogous', 'triadic', 'splitComplementary'];
@@ -547,7 +554,8 @@ export default function HalftoneLab() {
 
     // Fix Bug 05: Background randomization respecting neutrals
     // Only randomize background if it currently uses a palette key (not null)
-    if (backgroundColorKey) {
+    // Feature 03: check backgroundLocked
+    if (backgroundColorKey && !backgroundLocked) {
       // Pick a random color from the new palette for the background
       const randomBgKey = newKeys[Math.floor(Math.random() * newKeys.length)];
       setBackgroundColorKey(randomBgKey);
@@ -1166,6 +1174,8 @@ export default function HalftoneLab() {
           onRandomizePalette={randomizePalette}
           activePalette={activePalette}
           onToggleLayerLock={toggleLayerLock}
+          backgroundLocked={backgroundLocked}
+          onToggleBackgroundLock={toggleBackgroundLock}
           onReorderLayers={reorderLayers}
         />
       </div>

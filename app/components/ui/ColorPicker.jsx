@@ -634,12 +634,16 @@ export function LayerColorDropdown({ value, onChange, palette = null, onUpdatePa
   const handlePickerChange = useCallback((newHex) => {
     isPickingRef.current = true;
     setLocalHex(newHex);
+
     // Update the palette color for the current layer's colorKey
     if (onUpdatePaletteColor && value && !value.startsWith('#')) {
       // value is a palette key (like 'coral', 'teal', etc.)
       onUpdatePaletteColor(value, newHex);
+    } else {
+      // Direct update for non-palette values (like custom hex or background)
+      onChange(newHex);
     }
-  }, [onUpdatePaletteColor, value]);
+  }, [value, onChange, onUpdatePaletteColor]);
 
   return (
     <div ref={containerRef} style={{ position: 'relative' }}>
