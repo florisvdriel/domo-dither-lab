@@ -36,6 +36,7 @@ export default function CompositionPanel({
   onSelectProject,
   // Background
   backgroundColor,
+  backgroundColorKey,
   // Layers
   layers,
   onAddLayer,
@@ -62,6 +63,9 @@ export default function CompositionPanel({
       .filter(layer => layer.visible !== false) // Only count visible layers
       .map(layer => layer.colorKey)
   );
+  if (backgroundColorKey) {
+    usedColorKeys.add(backgroundColorKey);
+  }
 
   const handleDragStart = (e, index) => {
     e.dataTransfer.setData('layerIndex', index);

@@ -530,6 +530,12 @@ export default function HalftoneLab() {
     // Update the ref to prevent useLayoutEffect from triggering another remap
     prevPaletteKeysRef.current = newKeys;
 
+    // Fix Bug 01: Update background color if it was using a palette color
+    // Pick a random color from the new palette for the background
+    const randomBgKey = newKeys[Math.floor(Math.random() * newKeys.length)];
+    setBackgroundColorKey(randomBgKey);
+    setBackgroundColorRaw(newPalette[randomBgKey].hex);
+
     setPalette(newPalette);
     saveCustomPalette(newPalette);
     const lockedCount = lockedColors.size;
@@ -1095,6 +1101,7 @@ export default function HalftoneLab() {
           onSelectLayer={(id) => setSelection({ type: 'layer', id })}
           onSelectProject={() => setSelection({ type: 'project', id: null })}
           backgroundColor={backgroundColor}
+          backgroundColorKey={backgroundColorKey}
           layers={layers}
           onAddLayer={addLayer}
           onToggleLayerVisibility={toggleLayerVisibility}
@@ -1290,6 +1297,7 @@ export default function HalftoneLab() {
         onPaperTextureChange={setPaperTexture}
         backgroundColor={backgroundColor}
         onBackgroundColorChange={setBackgroundColor}
+        backgroundColorKey={backgroundColorKey}
         exportResolution={exportResolution}
         onExportResolutionChange={setExportResolution}
         onExportPNG={exportPNG}

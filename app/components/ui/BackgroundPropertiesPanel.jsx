@@ -1,11 +1,12 @@
 'use client';
 
-import { ColorSwatch } from './ColorPicker';
+import { ColorSwatch, LayerColorDropdown } from './ColorPicker';
 import Section from './Section';
 
 export default function BackgroundPropertiesPanel({
   backgroundColor,
   onBackgroundColorChange,
+  backgroundColorKey,
   palette,
   colorKeys
 }) {
@@ -18,25 +19,18 @@ export default function BackgroundPropertiesPanel({
           color: '#444',
           margin: '0 0 12px 0'
         }}>
-          Select background color from palette
+          Select background color
         </p>
 
-        <div style={{
-          display: 'flex',
-          gap: '8px',
-          marginBottom: '16px',
-          flexWrap: 'wrap'
-        }}>
-          {/* Palette colors - pass key so background follows palette changes */}
-          {colorKeys.map(key => (
-            <ColorSwatch
-              key={key}
-              color={palette[key]?.hex || '#000000'}
-              selected={backgroundColor === palette[key]?.hex}
-              onClick={() => onBackgroundColorChange(key)}
-              size={36}
-            />
-          ))}
+        <div style={{ marginBottom: '16px' }}>
+          <LayerColorDropdown
+            value={backgroundColorKey || backgroundColor}
+            onChange={onBackgroundColorChange}
+            palette={palette}
+            // Background panel doesn't support updating palette colors in-place currently
+            // or we could pass a handler if desired, but for now matching safe implementation
+            onUpdatePaletteColor={null}
+          />
         </div>
 
         {/* Black and white options */}

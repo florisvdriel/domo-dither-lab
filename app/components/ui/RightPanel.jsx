@@ -53,7 +53,8 @@ export default function RightPanel({
   onRemoveLayer,
   onDuplicateLayer,
   activePalette,
-  onUpdatePaletteColor
+  onUpdatePaletteColor,
+  backgroundColorKey
 }) {
   const getPanelTitle = () => {
     switch (selection.type) {
@@ -105,6 +106,7 @@ export default function RightPanel({
           <BackgroundPropertiesPanel
             backgroundColor={backgroundColor}
             onBackgroundColorChange={onBackgroundColorChange}
+            backgroundColorKey={backgroundColorKey}
             palette={palette}
             colorKeys={colorKeys}
           />
