@@ -19,11 +19,13 @@ export default function LayerItem({
   onDragStart,
   onDragOver,
   onDrop,
-  onDragEnd
+  onDragEnd,
+  onToggleLock
 }) {
   const [hovering, setHovering] = useState(false);
   const algoInfo = DITHER_ALGORITHMS[layer.ditherType];
   const isVisible = layer.visible !== false;
+  const isLocked = layer.locked === true;
   const layerColor = palette[layer.colorKey]?.hex || '#fff';
 
   return (
@@ -75,6 +77,18 @@ export default function LayerItem({
           padding: '10px 12px',
           gap: '8px'
         }}>
+          {/* Lock toggle */}
+          <IconButton
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleLock();
+            }}
+            title={isLocked ? "Unlock layer" : "Lock layer"}
+            style={{ color: isLocked ? '#fff' : '#444' }}
+          >
+            {isLocked ? '🔒' : '🔓'}
+          </IconButton>
+
           {/* Visibility toggle */}
           <IconButton
             onClick={(e) => {

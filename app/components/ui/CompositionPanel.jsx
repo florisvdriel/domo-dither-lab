@@ -49,8 +49,7 @@ export default function CompositionPanel({
   onUpdatePaletteColor,
   onRandomizePalette,
   activePalette,
-  lockedColors = new Set(),
-  onToggleColorLock,
+  onToggleLayerLock,
   onReorderLayers
 }) {
   const [sourceHovering, setSourceHovering] = useState(false);
@@ -231,6 +230,7 @@ export default function CompositionPanel({
               onDragStart={(e) => handleDragStart(e, i)}
               onDragOver={handleDragOver}
               onDrop={(e) => handleDrop(e, i)}
+              onToggleLock={() => onToggleLayerLock(i)}
             />
           ))}
 
@@ -263,8 +263,7 @@ export default function CompositionPanel({
             {colorKeys.map((key, idx) => {
               const isUsed = usedColorKeys.has(key);
               const isHovering = hoveringSwatchKey === key;
-              const isLocked = lockedColors.has(key);
-              const swatchOpacity = (isUsed || isHovering || isLocked) ? 1 : 0.5;
+              const swatchOpacity = (isUsed || isHovering) ? 1 : 0.5;
 
               return (
                 <div
@@ -283,31 +282,7 @@ export default function CompositionPanel({
                     onChange={(newHex) => onUpdatePaletteColor(key, newHex)}
                     size="100%"
                   />
-                  {/* Lock button - visible on hover or when locked */}
-                  {(isHovering || isLocked) && onToggleColorLock && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onToggleColorLock(key);
-                      }}
-                      style={{
-                        position: 'absolute',
-                        top: '2px',
-                        right: '2px',
-                        background: isLocked ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.4)',
-                        border: 'none',
-                        cursor: 'pointer',
-                        fontSize: '10px',
-                        padding: '2px 4px',
-                        borderRadius: '2px',
-                        color: isLocked ? '#fff' : '#888',
-                        lineHeight: 1
-                      }}
-                      title={isLocked ? 'Unlock color' : 'Lock color'}
-                    >
-                      {isLocked ? '🔒' : '🔓'}
-                    </button>
-                  )}
+                  {/* Lock button removed - using layer locking instead */}
                 </div>
               );
             })}
