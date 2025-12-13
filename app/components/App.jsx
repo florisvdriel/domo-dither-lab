@@ -725,6 +725,8 @@ export default function HalftoneLab() {
     if (!sourceImage || !targetCanvas) return;
 
     const ctx = targetCanvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false; // Crisp nearest-neighbor scaling
+    
     const sourceCanvas = document.createElement('canvas');
     const sourceCtx = sourceCanvas.getContext('2d');
     sourceCtx.imageSmoothingEnabled = false; // Crisp nearest-neighbor scaling
@@ -910,6 +912,7 @@ export default function HalftoneLab() {
         return;
       }
       const originalCtx = originalCanvas.getContext('2d');
+      originalCtx.imageSmoothingEnabled = false; // Crisp nearest-neighbor scaling
       originalCanvas.width = previewImage.width;
       originalCanvas.height = previewImage.height;
       originalCtx.drawImage(previewImage, 0, 0);
@@ -989,6 +992,7 @@ export default function HalftoneLab() {
       sourceCanvas.width = image.width;
       sourceCanvas.height = image.height;
       const sourceCtx = sourceCanvas.getContext('2d');
+      sourceCtx.imageSmoothingEnabled = false; // Crisp nearest-neighbor scaling
       sourceCtx.drawImage(image, 0, 0);
       let imageData = sourceCtx.getImageData(0, 0, image.width, image.height);
 
