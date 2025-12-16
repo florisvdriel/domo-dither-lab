@@ -1,39 +1,58 @@
 'use client';
 
 import { useState } from 'react';
+import { COLORS, FONTS, TRANSITIONS } from '../../constants/design';
 
 export default function Section({ title, children, defaultOpen = true }) {
   const [open, setOpen] = useState(defaultOpen);
   const [hovering, setHovering] = useState(false);
   
   return (
-    <div style={{ borderBottom: '1px solid #222' }}>
+    <div style={{ 
+      borderBottom: `1px solid ${COLORS.border.subtle}`,
+      marginBottom: '2px'
+    }}>
       <button
         onClick={() => setOpen(!open)}
         onMouseEnter={() => setHovering(true)}
         onMouseLeave={() => setHovering(false)}
         style={{
           width: '100%',
-          padding: '14px 16px',
+          padding: '16px 20px',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          background: hovering ? '#0f0f0f' : 'transparent',
+          background: hovering ? COLORS.bg.secondary : 'transparent',
           border: 'none',
-          color: hovering ? '#888' : '#666',
+          borderLeft: open ? `3px solid ${COLORS.ink.coral}` : '3px solid transparent',
+          color: hovering ? COLORS.text.secondary : COLORS.text.tertiary,
           fontSize: '10px',
-          fontFamily: 'monospace',
+          fontFamily: FONTS.ui,
+          fontWeight: 500,
           cursor: 'pointer',
-          letterSpacing: '0.1em',
-          transition: 'all 0.12s ease'
+          letterSpacing: '0.08em',
+          transition: TRANSITIONS.fast,
+          textAlign: 'left'
         }}
       >
-        {title}
-        <span style={{ color: '#444' }}>{open ? '−' : '+'}</span>
+        <span>{title}</span>
+        <span style={{ 
+          color: COLORS.text.tertiary,
+          fontSize: '14px',
+          transition: TRANSITIONS.fast,
+          transform: open ? 'rotate(0deg)' : 'rotate(-90deg)'
+        }}>
+          ▼
+        </span>
       </button>
-      {open && <div style={{ padding: '0 16px 16px' }}>{children}</div>}
+      {open && (
+        <div style={{ 
+          padding: '20px',
+          backgroundColor: COLORS.bg.secondary 
+        }}>
+          {children}
+        </div>
+      )}
     </div>
   );
 }
-
-

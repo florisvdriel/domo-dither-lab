@@ -1,10 +1,12 @@
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
+import { COLORS, FONTS, TRANSITIONS } from '../../constants/design';
 
 export default function Slider({ value, min, max, step, onChange, label, debounceMs = 0 }) {
   const percent = ((value - min) / (max - min)) * 100;
   const [hovering, setHovering] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const [localValue, setLocalValue] = useState(value);
   const timeoutRef = useRef(null);
   const isDraggingRef = useRef(false);
@@ -33,7 +35,10 @@ export default function Slider({ value, min, max, step, onChange, label, debounc
     }
   }, [onChange, debounceMs]);
   
+  const handleMouseDown = () => setDragging(true);
+  
   const handleMouseUp = useCallback(() => {
+    setDragging(false);
     // Immediately fire the change on mouse up for responsiveness
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
@@ -44,17 +49,19 @@ export default function Slider({ value, min, max, step, onChange, label, debounc
   }, [onChange, localValue]);
   
   const displayPercent = ((localValue - min) / (max - min)) * 100;
+  const isActive = hovering || dragging;
   
   return (
-    <div style={{ marginBottom: '16px' }}>
+    <div style={{ marginBottom: '18px' }}>
       {label && (
         <label style={{ 
           display: 'block', 
-          color: '#666', 
+          color: COLORS.text.secondary, 
           fontSize: '10px', 
-          marginBottom: '10px', 
-          fontFamily: 'monospace',
-          letterSpacing: '0.05em'
+          marginBottom: '12px', 
+          fontFamily: FONTS.data,
+          letterSpacing: '0.05em',
+          fontWeight: 500
         }}>
           {label}
         </label>
@@ -62,7 +69,7 @@ export default function Slider({ value, min, max, step, onChange, label, debounc
       <div 
         style={{ 
           position: 'relative', 
-          height: '20px',
+          height: '24px',
           display: 'flex',
           alignItems: 'center',
           cursor: 'pointer'
@@ -70,24 +77,39 @@ export default function Slider({ value, min, max, step, onChange, label, debounc
         onMouseEnter={() => setHovering(true)}
         onMouseLeave={() => setHovering(false)}
       >
+        {/* Track background */}
         <div style={{ 
           position: 'absolute',
           left: 0,
           right: 0,
-          height: '1px', 
-          backgroundColor: hovering ? '#555' : '#333',
-          transition: 'background-color 0.15s ease'
+          height: '2px', 
+          backgroundColor: COLORS.border.default,
+          transition: TRANSITIONS.fast
         }} />
         
+        {/* Active track (filled portion) */}
+        <div style={{ 
+          position: 'absolute',
+          left: 0,
+          width: `${displayPercent}%`,
+          height: '2px', 
+          backgroundColor: isActive ? COLORS.ink.coral : COLORS.border.strong,
+          transition: TRANSITIONS.fast
+        }} />
+        
+        {/* Thumb */}
         <div style={{ 
           position: 'absolute',
           left: `${displayPercent}%`,
           transform: 'translateX(-50%)',
-          width: hovering ? '10px' : '8px',
-          height: hovering ? '10px' : '8px',
-          backgroundColor: '#fff',
-          transition: 'all 0.12s ease',
-          pointerEvents: 'none'
+          width: isActive ? '14px' : '12px',
+          height: isActive ? '14px' : '12px',
+          backgroundColor: COLORS.ink.coral,
+          borderRadius: '50%',
+          border: isActive ? `2px solid ${COLORS.text.primary}` : 'none',
+          transition: TRANSITIONS.fast,
+          pointerEvents: 'none',
+          boxShadow: isActive ? `0 0 12px ${COLORS.ink.coralDim}` : '0 2px 4px rgba(0,0,0,0.3)'
         }} />
         
         <input 
@@ -97,6 +119,7 @@ export default function Slider({ value, min, max, step, onChange, label, debounc
           step={step} 
           value={localValue}
           onChange={handleChange}
+          onMouseDown={handleMouseDown}
           onMouseUp={handleMouseUp}
           onTouchEnd={handleMouseUp}
           style={{ 
@@ -112,5 +135,3 @@ export default function Slider({ value, min, max, step, onChange, label, debounc
     </div>
   );
 }
-
-

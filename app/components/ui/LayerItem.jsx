@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { DITHER_ALGORITHMS } from '../../constants/ditherAlgorithms';
+import { COLORS, FONTS, TRANSITIONS } from '../../constants/design';
 import IconButton from './IconButton';
 
 export default function LayerItem({
@@ -36,12 +37,14 @@ export default function LayerItem({
       onDrop={onDrop}
       onDragEnd={onDragEnd}
       style={{
-        marginBottom: '4px',
-        backgroundColor: isSelected ? '#1a1a1a' : '#000',
-        border: isSelected ? '1px solid #444' : (hovering ? '1px solid #333' : '1px solid #222'),
-        transition: 'all 0.12s ease',
+        marginBottom: '6px',
+        backgroundColor: isSelected ? COLORS.bg.tertiary : COLORS.bg.secondary,
+        border: isSelected ? `1px solid ${COLORS.border.strong}` : (hovering ? `1px solid ${COLORS.border.default}` : `1px solid ${COLORS.border.subtle}`),
+        borderRadius: '6px',
+        transition: TRANSITIONS.fast,
         opacity: isVisible ? 1 : 0.5,
-        cursor: 'grab'
+        cursor: 'grab',
+        boxShadow: hovering ? '0 4px 12px rgba(0,0,0,0.3)' : 'none'
       }}
       onMouseEnter={() => setHovering(true)}
       onMouseLeave={() => setHovering(false)}
@@ -50,19 +53,22 @@ export default function LayerItem({
       <div style={{ display: 'flex' }}>
         {/* Color indicator stripe */}
         <div style={{
-          width: '4px',
+          width: '6px',
           flexShrink: 0,
-          backgroundColor: layerColor
+          backgroundColor: layerColor,
+          borderTopLeftRadius: '6px',
+          borderBottomLeftRadius: '6px',
+          boxShadow: 'inset -2px 0 4px rgba(0,0,0,0.3)'
         }} />
 
         {/* Drag Handle */}
         <div style={{
-          width: '18px',
+          width: '22px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          color: '#333',
-          borderRight: '1px solid #1a1a1a',
+          color: COLORS.text.tertiary,
+          borderRight: `1px solid ${COLORS.border.subtle}`,
           cursor: 'grab',
           fontSize: '14px',
           lineHeight: 1
@@ -74,8 +80,8 @@ export default function LayerItem({
           flex: 1,
           display: 'flex',
           alignItems: 'center',
-          padding: '10px 12px',
-          gap: '8px'
+          padding: '12px 14px',
+          gap: '10px'
         }}>
           {/* Lock toggle */}
           <IconButton
@@ -84,7 +90,7 @@ export default function LayerItem({
               onToggleLock();
             }}
             title={isLocked ? "Unlock layer" : "Lock layer"}
-            style={{ color: isLocked ? '#fff' : '#444' }}
+            active={isLocked}
           >
             {isLocked ? '🔒' : '🔓'}
           </IconButton>
@@ -96,6 +102,7 @@ export default function LayerItem({
               onToggleVisibility();
             }}
             title={isVisible ? "Hide layer" : "Show layer"}
+            active={isVisible}
           >
             {isVisible ? '◉' : '○'}
           </IconButton>
@@ -104,23 +111,25 @@ export default function LayerItem({
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{
               fontSize: '10px',
-              color: '#888',
-              fontFamily: 'monospace',
+              color: COLORS.text.secondary,
+              fontFamily: FONTS.ui,
+              fontWeight: 500,
               display: 'flex',
               gap: '4px',
               alignItems: 'baseline'
             }}>
-              <span style={{ color: '#666' }}>LAYER {index + 1}</span>
+              <span style={{ color: COLORS.text.tertiary }}>LAYER {index + 1}</span>
             </div>
             <div style={{
               fontSize: '9px',
-              color: '#555',
-              fontFamily: 'monospace',
-              marginTop: '2px',
+              color: COLORS.text.tertiary,
+              fontFamily: FONTS.data,
+              marginTop: '3px',
               textTransform: 'uppercase',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap'
+              whiteSpace: 'nowrap',
+              letterSpacing: '0.03em'
             }}>
               {algoInfo?.name || 'UNKNOWN'}
             </div>
@@ -131,12 +140,11 @@ export default function LayerItem({
             display: 'flex',
             gap: '2px',
             opacity: hovering || isSelected ? 1 : 0,
-            transition: 'opacity 0.12s ease'
+            transition: TRANSITIONS.fast
           }}>
             <IconButton
               onClick={(e) => { e.stopPropagation(); onDuplicate(); }}
               title="Duplicate"
-              style={{ fontSize: '10px' }}
             >
               ⧉
             </IconButton>
@@ -144,7 +152,6 @@ export default function LayerItem({
               <IconButton
                 onClick={(e) => { e.stopPropagation(); onRemove(); }}
                 title="Remove"
-                style={{ fontSize: '10px' }}
               >
                 ×
               </IconButton>
@@ -155,9 +162,3 @@ export default function LayerItem({
     </div>
   );
 }
-
-
-
-
-
-

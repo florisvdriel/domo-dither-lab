@@ -7,6 +7,7 @@ import { DEFAULT_PALETTE } from '../constants/palette';
 import { DITHER_ALGORITHMS } from '../constants/ditherAlgorithms';
 import { PRESETS } from '../constants/presets';
 import { BLEND_MODES, EXPORT_RESOLUTIONS, PREVIEW_MAX_WIDTH, DEFAULT_STATE } from '../constants';
+import { COLORS, FONTS, TRANSITIONS } from '../constants/design';
 
 // Utilities
 import { useDebounce, getGray } from '../utils/helpers';
@@ -1141,17 +1142,47 @@ export default function HalftoneLab() {
   }, [image, previewImage, debouncedImageScale, debouncedLayers, backgroundColor, getSourceImageData, activePalette]);
 
   return (
-    <div style={{ display: 'flex', height: '100vh', backgroundColor: '#000', color: '#fff', fontFamily: 'monospace' }}>
+    <div style={{ display: 'flex', height: '100vh', backgroundColor: COLORS.bg.primary, color: COLORS.text.primary, fontFamily: FONTS.ui }}>
       {/* Hidden file inputs */}
       <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} style={{ display: 'none' }} />
       <input ref={presetImportRef} type="file" accept=".json" onChange={importPresetsFromJSON} style={{ display: 'none' }} />
 
       {/* Left Sidebar - Composition */}
-      <div style={{ width: '240px', backgroundColor: '#0a0a0a', borderRight: '1px solid #222', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{ width: '280px', backgroundColor: COLORS.bg.secondary, borderRight: `1px solid ${COLORS.border.default}`, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
         {/* Header */}
-        <div style={{ padding: '20px 16px', borderBottom: '1px solid #222', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h1 style={{ fontSize: '11px', letterSpacing: '0.2em', margin: 0, fontWeight: 400 }}>STACK LAB</h1>
+        <div style={{ 
+          padding: '24px 20px', 
+          borderBottom: `2px solid ${COLORS.ink.coral}`,
+          background: `linear-gradient(180deg, ${COLORS.bg.primary} 0%, ${COLORS.bg.secondary} 100%)`,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div>
+              <h1 style={{ 
+                fontSize: '14px', 
+                letterSpacing: '0.05em',
+                fontWeight: 600,
+                margin: 0,
+                color: COLORS.text.primary,
+                fontFamily: FONTS.ui
+              }}>
+                Halftone Lab
+              </h1>
+              <p style={{ 
+                fontSize: '9px', 
+                color: COLORS.text.tertiary,
+                margin: '2px 0 0 0',
+                letterSpacing: '0.05em',
+                fontFamily: FONTS.data
+              }}>
+                Professional Dithering
+              </p>
+            </div>
+          </div>
+          
           <IconButton onClick={() => setSelection({ type: 'project', id: null })} title="Project settings">⚙</IconButton>
         </div>
 
@@ -1212,7 +1243,7 @@ export default function HalftoneLab() {
             alignItems: 'center',
             justifyContent: 'center',
             padding: '32px',
-            backgroundColor: '#111',
+            backgroundColor: COLORS.bg.primary,
             overflow: 'hidden',
             position: 'relative',
             cursor: isPanning ? 'grabbing' : (image && !showComparison ? 'grab' : 'default')
@@ -1242,29 +1273,45 @@ export default function HalftoneLab() {
           {image && (
             <div style={{
               position: 'absolute',
-              top: '16px',
-              left: '16px',
-              right: '16px',
+              top: '20px',
+              left: '20px',
+              right: '20px',
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
               zIndex: 10,
-              pointerEvents: 'none'
+              pointerEvents: 'none',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+              backgroundColor: 'rgba(13, 13, 13, 0.75)',
+              padding: '14px 18px',
+              borderRadius: '8px',
+              border: `1px solid ${COLORS.border.subtle}`,
+              boxShadow: '0 4px 20px rgba(0,0,0,0.4)'
             }}>
               {/* Dimensions */}
               <div style={{
                 fontSize: '10px',
-                color: '#555',
-                fontFamily: 'monospace',
-                backgroundColor: 'rgba(0,0,0,0.5)',
-                padding: '6px 10px'
+                color: COLORS.text.secondary,
+                fontFamily: FONTS.data,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
               }}>
-                {image.width} × {image.height}
-                {image.width > PREVIEW_MAX_WIDTH && (
-                  <span style={{ color: '#666', marginLeft: '8px' }}>
-                    (preview @ {Math.round(PREVIEW_MAX_WIDTH / image.width * 100)}%)
-                  </span>
-                )}
+                <div style={{
+                  width: '4px',
+                  height: '16px',
+                  backgroundColor: COLORS.ink.coral,
+                  borderRadius: '2px'
+                }}/>
+                <span>
+                  {image.width} × {image.height}
+                  {image.width > PREVIEW_MAX_WIDTH && (
+                    <span style={{ color: COLORS.text.tertiary, marginLeft: '8px' }}>
+                      (preview @ {Math.round(PREVIEW_MAX_WIDTH / image.width * 100)}%)
+                    </span>
+                  )}
+                </span>
               </div>
 
               {/* Controls */}
@@ -1284,22 +1331,26 @@ export default function HalftoneLab() {
           {image && !showComparison && (
             <div style={{
               position: 'absolute',
-              bottom: '16px',
+              bottom: '20px',
               left: '50%',
               transform: 'translateX(-50%)',
               fontSize: '9px',
-              color: '#333',
-              fontFamily: 'monospace',
-              pointerEvents: 'none'
+              color: COLORS.text.tertiary,
+              fontFamily: FONTS.data,
+              pointerEvents: 'none',
+              letterSpacing: '0.05em'
             }}>
               Scroll to zoom • Drag to pan
             </div>
           )}
 
           {!image ? (
-            <div style={{ textAlign: 'center', color: '#444' }}>
-              <div style={{ fontSize: '48px', marginBottom: '16px', opacity: 0.5 }}>◐</div>
-              <p style={{ fontSize: '10px', letterSpacing: '0.1em' }}>UPLOAD OR DROP IMAGE</p>
+            <div style={{ textAlign: 'center', color: COLORS.text.tertiary }}>
+              <div style={{ fontSize: '56px', marginBottom: '20px', opacity: 0.4 }}>◐</div>
+              <p style={{ fontSize: '11px', letterSpacing: '0.1em', fontFamily: FONTS.ui, fontWeight: 500 }}>UPLOAD OR DROP IMAGE</p>
+              <p style={{ fontSize: '9px', marginTop: '8px', color: COLORS.text.tertiary, fontFamily: FONTS.data }}>
+                JPG, PNG, WebP supported
+              </p>
             </div>
           ) : (
             <div
@@ -1308,7 +1359,7 @@ export default function HalftoneLab() {
                 width: previewImage ? `${previewImage.width}px` : `${viewportSize.w}px`,
                 height: previewImage ? `${previewImage.height}px` : `${viewportSize.h}px`,
                 position: 'relative',
-                backgroundColor: '#111'
+                backgroundColor: COLORS.bg.primary
               }}
             >
               <div style={{

@@ -1,9 +1,24 @@
 'use client';
 
 import { useState } from 'react';
+import { COLORS, TRANSITIONS } from '../../constants/design';
 
-export default function IconButton({ children, onClick, disabled = false, title }) {
+export default function IconButton({ children, onClick, disabled = false, title, active = false }) {
   const [hovering, setHovering] = useState(false);
+  
+  let bg = 'transparent';
+  let color = COLORS.text.tertiary;
+  
+  if (disabled) {
+    bg = 'transparent';
+    color = COLORS.border.default;
+  } else if (active) {
+    bg = COLORS.ink.coralDim;
+    color = COLORS.ink.coral;
+  } else if (hovering) {
+    bg = COLORS.bg.elevated;
+    color = COLORS.text.primary;
+  }
   
   return (
     <button
@@ -13,22 +28,21 @@ export default function IconButton({ children, onClick, disabled = false, title 
       disabled={disabled}
       title={title}
       style={{
-        width: '20px',
-        height: '20px',
+        width: '28px',
+        height: '28px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: hovering && !disabled ? '#333' : 'transparent',
+        background: bg,
         border: 'none',
-        color: disabled ? '#333' : (hovering ? '#fff' : '#666'),
-        fontSize: '12px',
+        color: color,
+        fontSize: '14px',
         cursor: disabled ? 'default' : 'pointer',
-        transition: 'all 0.12s ease'
+        transition: TRANSITIONS.fast,
+        borderRadius: '4px'
       }}
     >
       {children}
     </button>
   );
 }
-
-

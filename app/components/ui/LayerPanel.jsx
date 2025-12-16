@@ -71,7 +71,7 @@ export default function LayerPanel({ layer, index, totalLayers, onUpdate, onRemo
               <Slider label={`DENSITY ${Math.round(layer.threshold * 100)}%`} value={layer.threshold} min={0} max={1} step={0.01} onChange={(v) => onUpdate({ ...layer, threshold: v })} debounceMs={50} />
               
               {algoInfo?.hasScale && (
-                <Slider label={`SIZE ${layer.scale}px`} value={layer.scale} min={2} max={32} step={1} onChange={(v) => onUpdate({ ...layer, scale: v })} debounceMs={50} />
+                <Slider label={`SIZE ${layer.scale}px`} value={layer.scale} min={1} max={64} step={1} onChange={(v) => onUpdate({ ...layer, scale: v })} debounceMs={50} />
               )}
               
               {algoInfo?.hasAngle && (
