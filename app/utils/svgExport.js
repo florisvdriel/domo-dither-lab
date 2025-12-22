@@ -5,8 +5,108 @@
 
 import { DEFAULT_PALETTE } from '../constants/palette';
 import { DITHER_ALGORITHMS } from '../constants/ditherAlgorithms';
-import { getGray } from './helpers';
+import { getGray, GRAY_R, GRAY_G, GRAY_B } from './helpers';
 import { applyBrightnessContrast } from './imageProcessing';
+
+// Helper: Get Channel Value
+const getChannel = (data, i, channel) => {
+  const r = data[i];
+  const g = data[i + 1];
+  const b = data[i + 2];
+
+  switch (channel) {
+    case 'red': return r;
+    case 'green': return g;
+    case 'blue': return b;
+    case 'cyan': return 255 - r;
+    case 'magenta': return 255 - g;
+    case 'yellow': return 255 - b;
+    case 'black': return Math.max(0, 255 - Math.max(r, g, b));
+    case 'gray': default:
+      return r * GRAY_R + g * GRAY_G + b * GRAY_B;
+  }
+};
+
+// Helper: Box Blur
+function boxBlur(data, w, h, radius) {
+  if (radius < 1) return;
+  const len = w * h;
+  const temp = new Float32Array(len);
+
+  // Horizontal
+  for (let y = 0; y < h; y++) {
+    const yw = y * w;
+    for (let x = 0; x < w; x++) {
+      let sum = 0;
+      let count = 0;
+      for (let k = -radius; k <= radius; k++) {
+        const px = Math.min(w - 1, Math.max(0, x + k));
+        sum += data[yw + px];
+        count++;
+      }
+      temp[yw + x] = sum / count;
+    }
+  }
+
+  // Vertical
+  for (let x = 0; x < w; x++) {
+    for (let y = 0; y < h; y++) {
+      let sum = 0;
+      let count = 0;
+      for (let k = -radius; k <= radius; k++) {
+        const py = Math.min(h - 1, Math.max(0, y + k));
+        sum += temp[py * w + x];
+        count++;
+      }
+      data[y * w + x] = sum / count;
+    }
+  }
+}
+
+// Helper: Preprocess (Blur, B/C, Clamp, Invert) -> Returns 0-1 Darkness Map
+function preprocess(imageData, w, h, options) {
+  const {
+    channel = 'gray',
+    preBlur = 0,
+    brightness = 0,
+    contrast = 0,
+    invert = false,
+    clampMin = 0,
+    clampMax = 1
+  } = options;
+
+  const len = w * h;
+  const input = imageData.data;
+  const output = new Float32Array(len);
+
+  const cFactor = (259 * (contrast + 255)) / (255 * (259 - contrast));
+
+  for (let i = 0; i < len; i++) {
+    let val = getChannel(input, i * 4, channel);
+
+    if (contrast !== 0) val = cFactor * (val - 128) + 128;
+    if (brightness !== 0) val += brightness * 2.55;
+
+    val = Math.max(0, Math.min(255, val));
+    let norm = val / 255;
+
+    let darkness = 1 - norm;
+    const isInk = ['cyan', 'magenta', 'yellow', 'black'].includes(channel);
+    if (isInk) darkness = norm;
+
+    if (invert) darkness = 1 - darkness;
+
+    if (darkness < clampMin) darkness = 0;
+    else if (darkness > clampMax) darkness = 1;
+    else darkness = (darkness - clampMin) / (clampMax - clampMin);
+
+    output[i] = darkness;
+  }
+
+  if (preBlur > 0) boxBlur(output, w, h, preBlur);
+
+  return output;
+}
 
 // Coordinate precision for file size optimization
 const PRECISION = 1;
@@ -65,64 +165,117 @@ export function generateLayerSVG(layer, sourceImageData, dimensions, options = {
  */
 function generateHalftoneCircles(layer, sourceImageData, dimensions, scaleFactor) {
   const { width, height } = dimensions;
-  const data = sourceImageData.data;
-  const srcWidth = sourceImageData.width;
-  const srcHeight = sourceImageData.height;
+  // Preprocess source data using new parameters
+  const preOptions = {
+    channel: layer.channel,
+    preBlur: (layer.preBlur || 0) * scaleFactor, // Scale blur radius
+    brightness: layer.brightness,
+    contrast: layer.contrast,
+    invert: layer.invert,
+    clampMin: layer.clampMin,
+    clampMax: layer.clampMax
+  };
+
+  // Create darkness map (0-1)
+  // Notes: preprocess expects specific w/h matching the ImageData. 
+  // sourceImageData here is the original full-res image usually?
+  // dimensions is the target SVG size.
+  // We need to map coordinate space.
+
+  // The 'preprocess' function works on the provided imageData.
+  // We should preprocess the source image ONCE.
+  // But wait, 'generateHalftoneCircles' is called per layer.
+  // Processing the hole full-res source might be efficient enough.
+  const mapWidth = sourceImageData.width;
+  const mapHeight = sourceImageData.height;
+  const map = preprocess(sourceImageData, mapWidth, mapHeight, preOptions);
 
   const step = Math.max(1, Math.floor(layer.scale * scaleFactor));
-  const maxRadius = step * 0.48;
+  const baseRadius = step * 0.5;
   const rad = (layer.angle * Math.PI) / 180;
   const cos = Math.cos(rad);
   const sin = Math.sin(rad);
-  const radiusMultiplier = maxRadius * (0.6 + layer.threshold * 0.7);
+
   const wHalf = width * 0.5;
   const hHalf = height * 0.5;
 
-  // Layer offsets (scaled)
+  // Offsets
   const offsetX = layer.offsetX * scaleFactor;
   const offsetY = layer.offsetY * scaleFactor;
 
-  // Calculate tight grid bounds
+  // Grid Bounds
   const diagonal = Math.sqrt(width * width + height * height);
-  const gridExtent = diagonal * 0.6;
-  const minGrid = -gridExtent;
-  const maxGrid = gridExtent;
+  const gridExtent = diagonal * 0.7; // Slightly larger to cover rotation
+  const minGrid = Math.floor(-gridExtent / step) * step;
+  const maxGrid = Math.ceil(gridExtent / step) * step;
 
   let svg = '';
   const circles = [];
 
-  for (let gy = minGrid; gy <= maxGrid; gy += step) {
-    for (let gx = minGrid; gx <= maxGrid; gx += step) {
-      // Calculate element position (where the circle will be drawn)
-      const cx = gx * cos - gy * sin + wHalf;
-      const cy = gx * sin + gy * cos + hHalf;
+  const dotScaleMin = layer.dotScaleMin !== undefined ? layer.dotScaleMin : 0.1;
+  const dotScaleMax = layer.dotScaleMax !== undefined ? layer.dotScaleMax : 1;
 
-      // Bounds check for element position
-      if (cx < -step || cx >= width + step || cy < -step || cy >= height + step) continue;
+  const gridType = layer.gridType || 'square';
+  const isHex = gridType === 'hex';
 
-      // Calculate sample position (where to read from source image)
-      // Apply offset here - this shifts what part of the image is sampled for this grid position
-      const sampleX = cx - offsetX;
-      const sampleY = cy - offsetY;
+  // Helper to process dot
+  const processDot = (cx, cy) => {
+    // Bounds check
+    if (cx < -step || cx >= width + step || cy < -step || cy >= height + step) return;
 
-      // Sample from source image at offset position
-      const srcX = Math.max(0, Math.min(srcWidth - 1, Math.round(sampleX * srcWidth / width)));
-      const srcY = Math.max(0, Math.min(srcHeight - 1, Math.round(sampleY * srcHeight / height)));
-      const idx = (srcY * srcWidth + srcX) * 4;
+    // Sample position (apply layer offset)
+    const sampleX = cx - offsetX;
+    const sampleY = cy - offsetY;
 
-      if (idx + 2 < data.length) {
-        const gray = getGray(data, idx);
-        const darkness = 1 - gray;
-        const radius = Math.sqrt(darkness) * radiusMultiplier;
+    // Map to source image coordinates
+    const srcX = Math.round(sampleX * mapWidth / width);
+    const srcY = Math.round(sampleY * mapHeight / height);
 
-        if (radius >= MIN_ELEMENT_SIZE) {
-          circles.push({ cx: round(cx), cy: round(cy), r: round(radius) });
-        }
+    if (srcX >= 0 && srcX < mapWidth && srcY >= 0 && srcY < mapHeight) {
+      const idx = srcY * mapWidth + srcX;
+      const darkness = map[idx]; // 0-1
+
+      // Calculate radius
+      // relativeSize maps darkness 0-1 to dotScaleMin-dotScaleMax
+      const relativeSize = dotScaleMin + (darkness * (dotScaleMax - dotScaleMin));
+
+      // Apply Threshold as global density scale
+      let radius = baseRadius * relativeSize * layer.threshold;
+
+      if (radius >= MIN_ELEMENT_SIZE) {
+        circles.push({ cx: round(cx), cy: round(cy), r: round(radius) });
+      }
+    }
+  };
+
+  if (gridType === 'radial') {
+    const maxR = gridExtent;
+    for (let r = 0; r <= maxR; r += step) {
+      const circumference = 2 * Math.PI * r;
+      const dotsCount = r === 0 ? 1 : Math.round(circumference / step);
+      const angleStep = (2 * Math.PI) / dotsCount;
+      for (let i = 0; i < dotsCount; i++) {
+        const theta = i * angleStep + rad;
+        const cx = wHalf + r * Math.cos(theta);
+        const cy = hHalf + r * Math.sin(theta);
+        processDot(cx, cy);
+      }
+    }
+  } else {
+    // Square & Hex
+    let row = 0;
+    for (let gy = minGrid; gy <= maxGrid; gy += (isHex ? step * 0.866 : step)) {
+      const rowOffset = (isHex && row % 2 !== 0) ? step * 0.5 : 0;
+      row++;
+      for (let gx = minGrid; gx <= maxGrid; gx += step) {
+        const cx = (gx + rowOffset) * cos - gy * sin + wHalf;
+        const cy = (gx + rowOffset) * sin + gy * cos + hHalf;
+        processDot(cx, cy);
       }
     }
   }
 
-  // Generate optimized SVG - batch similar radii
+  // Generate optimized SVG
   for (const c of circles) {
     svg += `    <circle cx="${c.cx}" cy="${c.cy}" r="${c.r}"/>\n`;
   }
@@ -133,56 +286,107 @@ function generateHalftoneCircles(layer, sourceImageData, dimensions, scaleFactor
 /**
  * Generate halftone squares pattern
  */
+/**
+ * Generate halftone squares pattern
+ */
 function generateHalftoneSquares(layer, sourceImageData, dimensions, scaleFactor) {
   const { width, height } = dimensions;
-  const data = sourceImageData.data;
-  const srcWidth = sourceImageData.width;
-  const srcHeight = sourceImageData.height;
+
+  const preOptions = {
+    channel: layer.channel,
+    preBlur: (layer.preBlur || 0) * scaleFactor,
+    brightness: layer.brightness,
+    contrast: layer.contrast,
+    invert: layer.invert,
+    clampMin: layer.clampMin,
+    clampMax: layer.clampMax
+  };
+
+  const mapWidth = sourceImageData.width;
+  const mapHeight = sourceImageData.height;
+  const map = preprocess(sourceImageData, mapWidth, mapHeight, preOptions);
 
   const step = Math.max(1, Math.floor(layer.scale * scaleFactor));
-  const maxSize = step * 0.85;
+  const baseSize = step * 0.85;
   const rad = (layer.angle * Math.PI) / 180;
   const cos = Math.cos(rad);
   const sin = Math.sin(rad);
-  const sizeMultiplier = maxSize * (0.4 + layer.threshold * 0.6);
+
   const wHalf = width * 0.5;
   const hHalf = height * 0.5;
 
+  const offsetX = layer.offsetX * scaleFactor;
+  const offsetY = layer.offsetY * scaleFactor;
+
   const diagonal = Math.sqrt(width * width + height * height);
-  const gridExtent = diagonal * 0.6;
-  const minGrid = -gridExtent;
-  const maxGrid = gridExtent;
+  const gridExtent = diagonal * 0.7;
+  const minGrid = Math.floor(-gridExtent / step) * step;
+  const maxGrid = Math.ceil(gridExtent / step) * step;
 
   let svg = '';
+  const squares = [];
 
-  for (let gy = minGrid; gy <= maxGrid; gy += step) {
-    for (let gx = minGrid; gx <= maxGrid; gx += step) {
-      const offsetGx = gx - (layer.offsetX * scaleFactor);
-      const offsetGy = gy - (layer.offsetY * scaleFactor);
-      const cx = offsetGx * cos - offsetGy * sin + wHalf;
-      const cy = offsetGx * sin + offsetGy * cos + hHalf;
+  const dotScaleMin = layer.dotScaleMin !== undefined ? layer.dotScaleMin : 0.1;
+  const dotScaleMax = layer.dotScaleMax !== undefined ? layer.dotScaleMax : 1;
+  const gridType = layer.gridType || 'square';
+  const isHex = gridType === 'hex';
 
-      if (cx < -step || cx >= width + step || cy < -step || cy >= height + step) continue;
+  const processSquare = (cx, cy) => {
+    if (cx < -step || cx >= width + step || cy < -step || cy >= height + step) return;
 
-      const srcX = Math.max(0, Math.min(srcWidth - 1, Math.round(cx * srcWidth / width)));
-      const srcY = Math.max(0, Math.min(srcHeight - 1, Math.round(cy * srcHeight / height)));
-      const idx = (srcY * srcWidth + srcX) * 4;
+    const sampleX = cx - offsetX;
+    const sampleY = cy - offsetY;
 
-      if (idx + 2 < data.length) {
-        const gray = getGray(data, idx);
-        const darkness = 1 - gray;
-        const size = Math.sqrt(darkness) * sizeMultiplier;
+    const srcX = Math.round(sampleX * mapWidth / width);
+    const srcY = Math.round(sampleY * mapHeight / height);
 
-        if (size >= MIN_ELEMENT_SIZE) {
-          const halfSize = size * 0.5;
-          // For rotated squares, use transform
-          if (layer.angle !== 0) {
-            svg += `    <rect x="${round(-halfSize)}" y="${round(-halfSize)}" width="${round(size)}" height="${round(size)}" transform="translate(${round(cx)},${round(cy)}) rotate(${layer.angle})"/>\n`;
-          } else {
-            svg += `    <rect x="${round(cx - halfSize)}" y="${round(cy - halfSize)}" width="${round(size)}" height="${round(size)}"/>\n`;
-          }
-        }
+    if (srcX >= 0 && srcX < mapWidth && srcY >= 0 && srcY < mapHeight) {
+      const idx = srcY * mapWidth + srcX;
+      const darkness = map[idx];
+
+      const relativeSize = dotScaleMin + (darkness * (dotScaleMax - dotScaleMin));
+      let size = baseSize * relativeSize * layer.threshold; // scale size
+
+      if (size >= MIN_ELEMENT_SIZE) {
+        squares.push({ cx: round(cx), cy: round(cy), size: round(size) });
       }
+    }
+  };
+
+  if (gridType === 'radial') {
+    const maxR = gridExtent;
+    for (let r = 0; r <= maxR; r += step) {
+      const circumference = 2 * Math.PI * r;
+      const dotsCount = r === 0 ? 1 : Math.round(circumference / step);
+      const angleStep = (2 * Math.PI) / dotsCount;
+      for (let i = 0; i < dotsCount; i++) {
+        const theta = i * angleStep + rad;
+        const cx = wHalf + r * Math.cos(theta);
+        const cy = hHalf + r * Math.sin(theta);
+        processSquare(cx, cy);
+      }
+    }
+  } else {
+    // Square & Hex
+    let row = 0;
+    for (let gy = minGrid; gy <= maxGrid; gy += (isHex ? step * 0.866 : step)) {
+      const rowOffset = (isHex && row % 2 !== 0) ? step * 0.5 : 0;
+      row++;
+      for (let gx = minGrid; gx <= maxGrid; gx += step) {
+        const cx = (gx + rowOffset) * cos - gy * sin + wHalf;
+        const cy = (gx + rowOffset) * sin + gy * cos + hHalf;
+        processSquare(cx, cy);
+      }
+    }
+  }
+
+  for (const s of squares) {
+    const half = s.size / 2;
+    // If squares follow grid rotation:
+    if (layer.angle !== 0) {
+      svg += `    <rect x="${round(-half)}" y="${round(-half)}" width="${s.size}" height="${s.size}" transform="translate(${s.cx},${s.cy}) rotate(${layer.angle})"/>\n`;
+    } else {
+      svg += `    <rect x="${round(s.cx - half)}" y="${round(s.cy - half)}" width="${s.size}" height="${s.size}"/>\n`;
     }
   }
 
@@ -194,17 +398,32 @@ function generateHalftoneSquares(layer, sourceImageData, dimensions, scaleFactor
  */
 function generateHalftoneLines(layer, sourceImageData, dimensions, scaleFactor) {
   const { width, height } = dimensions;
-  const data = sourceImageData.data;
-  const srcWidth = sourceImageData.width;
-  const srcHeight = sourceImageData.height;
 
-  const spacing = Math.max(1, layer.scale * scaleFactor);
+  const preOptions = {
+    channel: layer.channel,
+    preBlur: (layer.preBlur || 0) * scaleFactor,
+    brightness: layer.brightness,
+    contrast: layer.contrast,
+    invert: layer.invert,
+    clampMin: layer.clampMin,
+    clampMax: layer.clampMax
+  };
+
+  const mapWidth = sourceImageData.width;
+  const mapHeight = sourceImageData.height;
+  const map = preprocess(sourceImageData, mapWidth, mapHeight, preOptions);
+
+  const spacing = Math.max(1, Math.floor(layer.lineSpacing * scaleFactor));
+  const maxWidth = spacing * 0.7; // Max stroke width
+
   const rad = (layer.angle * Math.PI) / 180;
   const cos = Math.cos(rad);
   const sin = Math.sin(rad);
-  const maxWidth = spacing * 0.7 * (0.5 + layer.threshold * 0.7);
 
-  // Generate line segments with varying stroke widths
+  const dotScaleMin = layer.dotScaleMin !== undefined ? layer.dotScaleMin : 0.1;
+  const dotScaleMax = layer.dotScaleMax !== undefined ? layer.dotScaleMax : 1;
+
+  // Generate line segments
   const diagonal = Math.sqrt(width * width + height * height);
   const numLines = Math.ceil(diagonal / spacing) * 2;
 
@@ -213,24 +432,27 @@ function generateHalftoneLines(layer, sourceImageData, dimensions, scaleFactor) 
   for (let i = -numLines; i <= numLines; i++) {
     const lineOffset = i * spacing - (layer.offsetX * scaleFactor);
 
-    // Line endpoints (extend beyond canvas)
+    // Line endpoints (extend beyond canvas to cover rotation)
     const x1 = lineOffset * cos + diagonal * sin;
     const y1 = lineOffset * sin - diagonal * cos;
     const x2 = lineOffset * cos - diagonal * sin;
     const y2 = lineOffset * sin + diagonal * cos;
 
     // Sample along the line to determine stroke width
+    // Currently we only sample the CENTER of the line. 
+    // This produces constant-width lines which is efficient but less detailed than the raster version.
     const midX = (x1 + x2) / 2 + width / 2;
     const midY = (y1 + y2) / 2 + height / 2;
 
-    const srcX = Math.max(0, Math.min(srcWidth - 1, Math.round(midX * srcWidth / width)));
-    const srcY = Math.max(0, Math.min(srcHeight - 1, Math.round(midY * srcHeight / height)));
-    const idx = (srcY * srcWidth + srcX) * 4;
+    const srcX = Math.round(midX * mapWidth / width);
+    const srcY = Math.round(midY * mapHeight / height);
 
-    if (idx + 2 < data.length) {
-      const gray = getGray(data, idx);
-      const darkness = 1 - gray;
-      const strokeWidth = Math.sqrt(darkness) * maxWidth;
+    if (srcX >= 0 && srcX < mapWidth && srcY >= 0 && srcY < mapHeight) {
+      const idx = srcY * mapWidth + srcX;
+      const darkness = map[idx];
+
+      const relativeSize = dotScaleMin + (darkness * (dotScaleMax - dotScaleMin));
+      const strokeWidth = relativeSize * maxWidth * layer.threshold;
 
       if (strokeWidth >= MIN_ELEMENT_SIZE) {
         svg += `    <line x1="${round(x1 + width / 2)}" y1="${round(y1 + height / 2)}" x2="${round(x2 + width / 2)}" y2="${round(y2 + height / 2)}" stroke="currentColor" stroke-width="${round(strokeWidth)}" fill="none"/>\n`;

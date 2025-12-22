@@ -260,7 +260,14 @@ export default function HalftoneLab() {
     visible: true,
     brightness: 0,
     contrast: 0,
-    hardness: 1
+    hardness: 1,
+    gridType: 'square',
+    channel: 'gray',
+    clampMin: 0,
+    clampMax: 1,
+    preBlur: 0,
+    dotScaleMin: 0.1,
+    dotScaleMax: 1
   });
 
   const addLayer = () => {
@@ -805,7 +812,11 @@ export default function HalftoneLab() {
         // Feature: Per-layer brightness/contrast
         // We do this on main thread as it's fast (pixel manipulation) and avoids transferring large buffers back and forth just for this
         let layerSourceData = sourceData;
-        if ((layer.brightness && layer.brightness !== 0) || (layer.contrast && layer.contrast !== 0)) {
+        // Halftone algorithms handle BC/Invert efficiently in the worker/algo itself
+        // So we skip main-thread processing for them to improve performance
+        const isHalftone = layer.ditherType.startsWith('halftone');
+
+        if (!isHalftone && ((layer.brightness && layer.brightness !== 0) || (layer.contrast && layer.contrast !== 0))) {
           layerSourceData = applyBrightnessContrast(sourceData, layer.brightness || 0, layer.contrast || 0);
         }
 
@@ -817,7 +828,17 @@ export default function HalftoneLab() {
             threshold: layer.threshold,
             scale: layer.scale,
             angle: layer.angle,
-            hardness: hardness
+            hardness: hardness,
+            gridType: layer.gridType || 'square',
+            channel: layer.channel || 'gray',
+            clampMin: layer.clampMin === undefined ? 0 : layer.clampMin,
+            clampMax: layer.clampMax === undefined ? 1 : layer.clampMax,
+            preBlur: layer.preBlur || 0,
+            dotScaleMin: layer.dotScaleMin === undefined ? 0.1 : layer.dotScaleMin,
+            dotScaleMax: layer.dotScaleMax === undefined ? 1 : layer.dotScaleMax,
+            brightness: layer.brightness || 0,
+            contrast: layer.contrast || 0,
+            invert: layer.invert || false
           }).then(result => ({
             layerId: layer.id,
             data: result,
@@ -831,7 +852,20 @@ export default function HalftoneLab() {
 
           if (algoInfo.category === 'halftone') {
             const hardness = layer.hardness === undefined ? 1 : layer.hardness;
-            ditheredData = algo(layerSourceData, layer.threshold, layer.scale, layer.angle, hardness);
+            const params = {
+              gridType: layer.gridType || 'square',
+              channel: layer.channel || 'gray',
+              clampMin: layer.clampMin === undefined ? 0 : layer.clampMin,
+              clampMax: layer.clampMax === undefined ? 1 : layer.clampMax,
+              preBlur: layer.preBlur || 0,
+              dotScaleMin: layer.dotScaleMin === undefined ? 0.1 : layer.dotScaleMin,
+              dotScaleMax: layer.dotScaleMax === undefined ? 1 : layer.dotScaleMax
+            };
+            // We need to update existing halftone functions to accept options object instead of positional args eventually
+            // For now, let's keep positional + extra obj? Or just pass obj?
+            // The algo signature is fixed in dithering.js currently: (data, threshold, size, angle, hardness)
+            // Refactoring to: (data, threshold, size, angle, hardness, options)
+            ditheredData = algo(layerSourceData, layer.threshold, layer.scale, layer.angle, hardness, params);
           } else if (algoInfo.hasScale && algoInfo.hasAngle) {
             ditheredData = algo(layerSourceData, layer.threshold, layer.scale, layer.angle);
           } else if (algoInfo.hasScale) {

@@ -1,5 +1,115 @@
 import { getGray, BAYER_2x2, BAYER_4x4, BAYER_8x8, BLUE_NOISE_64, GRAY_R, GRAY_G, GRAY_B, seededRandom, generateHilbertPath } from './helpers';
 
+// Helper to extract specific channel value
+const getChannel = (data, i, channel) => {
+  const r = data[i];
+  const g = data[i + 1];
+  const b = data[i + 2];
+
+  switch (channel) {
+    case 'red': return r;
+    case 'green': return g;
+    case 'blue': return b;
+    case 'cyan': return 255 - r; // Approximate
+    case 'magenta': return 255 - g;
+    case 'yellow': return 255 - b;
+    case 'black': return Math.max(0, 255 - Math.max(r, g, b)); // K from CMYK
+    case 'gray': default:
+      return r * GRAY_R + g * GRAY_G + b * GRAY_B;
+  }
+};
+
+function boxBlur(data, w, h, radius) {
+  if (radius < 1) return;
+  const len = w * h;
+  const temp = new Float32Array(len);
+
+  // Horizontal
+  for (let y = 0; y < h; y++) {
+    const yw = y * w;
+    for (let x = 0; x < w; x++) {
+      let sum = 0;
+      let count = 0;
+      for (let k = -radius; k <= radius; k++) {
+        const px = Math.min(w - 1, Math.max(0, x + k));
+        sum += data[yw + px];
+        count++;
+      }
+      temp[yw + x] = sum / count;
+    }
+  }
+
+  // Vertical (read from temp, write to data)
+  for (let x = 0; x < w; x++) {
+    for (let y = 0; y < h; y++) {
+      let sum = 0;
+      let count = 0;
+      for (let k = -radius; k <= radius; k++) {
+        const py = Math.min(h - 1, Math.max(0, y + k));
+        sum += temp[py * w + x];
+        count++;
+      }
+      data[y * w + x] = sum / count;
+    }
+  }
+}
+
+function preprocess(imageData, w, h, options) {
+  const {
+    channel = 'gray',
+    preBlur = 0,
+    brightness = 0,
+    contrast = 0,
+    invert = false,
+    clampMin = 0,
+    clampMax = 1
+  } = options;
+
+  const len = w * h;
+  const input = imageData.data;
+  const output = new Float32Array(len);
+
+  // Contrast factor
+  const cFactor = (259 * (contrast + 255)) / (255 * (259 - contrast));
+
+  for (let i = 0; i < len; i++) {
+    let val = getChannel(input, i * 4, channel);
+
+    if (contrast !== 0) {
+      val = cFactor * (val - 128) + 128;
+    }
+    if (brightness !== 0) {
+      val += brightness * 2.55;
+    }
+
+    val = Math.max(0, Math.min(255, val));
+    let norm = val / 255;
+
+    let darkness = 1 - norm;
+    const isInk = ['cyan', 'magenta', 'yellow', 'black'].includes(channel);
+    if (isInk) {
+      darkness = norm;
+    }
+
+    if (invert) {
+      darkness = 1 - darkness;
+    }
+
+    if (darkness < clampMin) darkness = 0;
+    else if (darkness > clampMax) darkness = 1;
+    else darkness = (darkness - clampMin) / (clampMax - clampMin);
+
+    output[i] = darkness;
+  }
+
+  if (preBlur > 0) {
+    boxBlur(output, w, h, preBlur);
+  }
+
+  return output;
+}
+
+
 // Dithering Algorithms
 export const ditherAlgorithms = {
   none: (imageData) => imageData,
@@ -211,94 +321,123 @@ export const ditherAlgorithms = {
     return new ImageData(data, w, h);
   },
 
-  halftoneCircle: (imageData, threshold, dotSize = 6, angle = 15, hardness = 1) => {
-    const data = new Uint8ClampedArray(imageData.data);
+
+  halftoneCircle: (imageData, threshold, dotSize = 6, angle = 15, hardness = 1, options = {}) => {
     const w = imageData.width, h = imageData.height;
+
+    const {
+      gridType = 'square',
+      dotScaleMin = 0.1,
+      dotScaleMax = 1
+    } = options;
+
+    const map = preprocess(imageData, w, h, options);
+
+    const data = new Uint8ClampedArray(imageData.data);
     data.fill(255);
 
-    const step = Math.max(1, Math.floor(dotSize));
-    const maxRadius = step * 0.48;
+    const step = Math.max(2, Math.floor(dotSize));
     const rad = (angle * Math.PI) * (1 / 180);
     const cos = Math.cos(rad), sin = Math.sin(rad);
-    const radiusMultiplier = maxRadius * (0.6 + threshold * 0.7);
-    const radiusThreshold = 0.5;
-    // Hardness 1 = 0 smooth; Hardness 0 = 1.5 smooth
     const edgeSmooth = (1 - hardness) * 1.5;
     const wHalf = w * 0.5;
     const hHalf = h * 0.5;
 
-    // OPTIMIZED: Calculate tight grid bounds based on rotated canvas corners
     const diagonal = Math.sqrt(w * w + h * h);
-    const gridExtent = diagonal * 0.6;
+    const gridExtent = diagonal * 0.7;
+    const minGrid = Math.floor(-gridExtent / step) * step;
+    const maxGrid = Math.ceil(gridExtent / step) * step;
+    const baseRadius = step * 0.5;
 
-    // Pre-calculate bounds for grid iteration
-    const minGridX = Math.floor(-gridExtent / step) * step;
-    const maxGridX = Math.ceil(gridExtent / step) * step;
-    const minGridY = Math.floor(-gridExtent / step) * step;
-    const maxGridY = Math.ceil(gridExtent / step) * step;
+    if (gridType === 'radial') {
+      const maxR = gridExtent;
+      for (let r = 0; r <= maxR; r += step) {
+        const circumference = 2 * Math.PI * r;
+        const dotsCount = r === 0 ? 1 : Math.round(circumference / step);
+        const angleStep = (2 * Math.PI) / dotsCount;
+        for (let i = 0; i < dotsCount; i++) {
+          const theta = i * angleStep + rad;
+          const cx = wHalf + r * Math.cos(theta);
+          const cy = hHalf + r * Math.sin(theta);
+          drawDot(cx, cy);
+        }
+      }
+    } else {
+      const isHex = gridType === 'hex';
+      let row = 0;
+      for (let gy = minGrid; gy <= maxGrid; gy += (isHex ? step * 0.866 : step)) {
+        const rowOffset = (isHex && row % 2 !== 0) ? step * 0.5 : 0;
+        row++;
+        for (let gx = minGrid; gx <= maxGrid; gx += step) {
+          const cx = (gx + rowOffset) * cos - gy * sin + wHalf;
+          const cy = (gx + rowOffset) * sin + gy * cos + hHalf;
+          drawDot(cx, cy);
+        }
+      }
+    }
 
-    for (let gy = minGridY; gy <= maxGridY; gy += step) {
-      for (let gx = minGridX; gx <= maxGridX; gx += step) {
-        const cx = gx * cos - gy * sin + wHalf;
-        const cy = gx * sin + gy * cos + hHalf;
+    function drawDot(cx, cy) {
+      if (cx < -step || cx >= w + step || cy < -step || cy >= h + step) return;
 
-        // Early bounds check
-        if (cx < -step || cx >= w + step || cy < -step || cy >= h + step) continue;
+      const sampleX = Math.max(0, Math.min(w - 1, Math.round(cx)));
+      const sampleY = Math.max(0, Math.min(h - 1, Math.round(cy)));
+      const si = sampleY * w + sampleX;
 
-        const sampleX = Math.max(0, Math.min(w - 1, Math.round(cx)));
-        const sampleY = Math.max(0, Math.min(h - 1, Math.round(cy)));
-        const si = (sampleY * w + sampleX) * 4;
-        const gray = getGray(imageData.data, si);
+      const darkness = map[si];
+      const relativeSize = dotScaleMin + (darkness * (dotScaleMax - dotScaleMin));
+      let finalRadius = baseRadius * relativeSize;
+      finalRadius *= threshold;
 
-        const darkness = 1 - gray;
-        const radius = Math.sqrt(darkness) * radiusMultiplier;
+      if (finalRadius < 0.5) return;
 
-        if (radius < radiusThreshold) continue;
+      const radiusWithSmooth = finalRadius + edgeSmooth;
+      const radiusSq = radiusWithSmooth * radiusWithSmooth;
 
-        const radiusWithSmooth = radius + edgeSmooth;
-        const minX = Math.max(0, Math.floor(cx - radiusWithSmooth));
-        const maxX = Math.min(w - 1, Math.ceil(cx + radiusWithSmooth));
-        const minY = Math.max(0, Math.floor(cy - radiusWithSmooth));
-        const maxY = Math.min(h - 1, Math.ceil(cy + radiusWithSmooth));
+      const minX = Math.max(0, Math.floor(cx - radiusWithSmooth));
+      const maxX = Math.min(w - 1, Math.ceil(cx + radiusWithSmooth));
+      const minY = Math.max(0, Math.floor(cy - radiusWithSmooth));
+      const maxY = Math.min(h - 1, Math.ceil(cy + radiusWithSmooth));
 
-        const radiusSq = radiusWithSmooth * radiusWithSmooth;
-
-        for (let py = minY; py <= maxY; py++) {
-          const dy = py - cy;
-          const dySq = dy * dy;
-          const pyw = py * w;
-          for (let px = minX; px <= maxX; px++) {
-            const dx = px - cx;
-            const distSq = dx * dx + dySq;
-
-            if (distSq <= radiusSq) {
-              const dist = Math.sqrt(distSq);
-              const i = (pyw + px) * 4;
-              // Smoother edge transition
-              const coverage = Math.max(0, Math.min(1, radius - dist + edgeSmooth));
-              const newVal = Math.round(255 * (1 - coverage));
-              const current = data[i];
-              if (newVal < current) {
-                data[i] = data[i + 1] = data[i + 2] = newVal;
-              }
+      for (let py = minY; py <= maxY; py++) {
+        const dy = py - cy;
+        const dySq = dy * dy;
+        const pyw = py * w;
+        for (let px = minX; px <= maxX; px++) {
+          const dx = px - cx;
+          const distSq = dx * dx + dySq;
+          if (distSq <= radiusSq) {
+            const dist = Math.sqrt(distSq);
+            const coverage = Math.max(0, Math.min(1, finalRadius - dist + edgeSmooth));
+            const inkVal = Math.round(255 * (1 - coverage));
+            const idx = (pyw + px) * 4;
+            if (inkVal < data[idx]) {
+              data[idx] = data[idx + 1] = data[idx + 2] = inkVal;
             }
           }
         }
       }
     }
+
     return new ImageData(data, w, h);
   },
 
-  halftoneLines: (imageData, threshold, lineSpacing = 4, angle = 45, hardness = 1) => {
-    const data = new Uint8ClampedArray(imageData.data);
+  halftoneLines: (imageData, threshold, lineSpacing = 4, angle = 45, hardness = 1, options = {}) => {
     const w = imageData.width, h = imageData.height;
+
+    const {
+      dotScaleMin = 0.1,
+      dotScaleMax = 1
+    } = options;
+
+    const map = preprocess(imageData, w, h, options);
+
+    const data = new Uint8ClampedArray(imageData.data);
     data.fill(255);
 
     const rad = (angle * Math.PI) * (1 / 180);
     const cos = Math.cos(rad), sin = Math.sin(rad);
     const spacing = Math.max(1, lineSpacing);
     const maxWidth = spacing * 0.7;
-    const widthMultiplier = maxWidth * (0.5 + threshold * 0.7);
     const spacingHalf = spacing * 0.5;
     const edgeSmooth = (1 - hardness) * 1.5;
 
@@ -307,106 +446,137 @@ export const ditherAlgorithms = {
       const ySin = y * sin;
       for (let x = 0; x < w; x++) {
         const i = (yw + x) * 4;
-        const gray = getGray(imageData.data, i);
+
+        const darkness = map[y * w + x];
 
         const rx = x * cos + ySin;
         const linePos = ((rx % spacing) + spacing) % spacing;
         const centerDist = Math.abs(linePos - spacingHalf);
 
-        const darkness = 1 - gray;
-        const lineWidth = Math.sqrt(darkness) * widthMultiplier;
+        // Map darkness to line width
+        const relativeSize = dotScaleMin + (darkness * (dotScaleMax - dotScaleMin));
+        const lineWidth = relativeSize * maxWidth * threshold; // Threshold scales global
         const halfWidth = lineWidth * 0.5;
         const thresholdDist = halfWidth + edgeSmooth;
 
         if (centerDist <= thresholdDist) {
           const coverage = Math.max(0, Math.min(1, halfWidth - centerDist + edgeSmooth));
           const val = Math.round(255 * (1 - coverage));
-          data[i] = data[i + 1] = data[i + 2] = val;
-        }
-      }
-    }
-    return new ImageData(data, w, h);
-  },
 
-  halftoneSquare: (imageData, threshold, size = 6, angle = 0, hardness = 1) => {
-    const data = new Uint8ClampedArray(imageData.data);
-    const w = imageData.width, h = imageData.height;
-    data.fill(255);
-
-    const step = Math.max(1, Math.floor(size));
-    const maxSize = step * 0.85;
-    const rad = (angle * Math.PI) * (1 / 180);
-    const cos = Math.cos(rad), sin = Math.sin(rad);
-    const sizeMultiplier = maxSize * (0.4 + threshold * 0.6) * 0.5;
-    const edgeSmooth = (1 - hardness) * 1.5;
-    const wHalf = w * 0.5;
-    const hHalf = h * 0.5;
-
-    // OPTIMIZED: Calculate tight grid bounds based on rotated canvas corners
-    const diagonal = Math.sqrt(w * w + h * h);
-    const gridExtent = diagonal * 0.6;
-
-    // Pre-calculate bounds for grid iteration
-    const minGridX = Math.floor(-gridExtent / step) * step;
-    const maxGridX = Math.ceil(gridExtent / step) * step;
-    const minGridY = Math.floor(-gridExtent / step) * step;
-    const maxGridY = Math.ceil(gridExtent / step) * step;
-
-    for (let gy = minGridY; gy <= maxGridY; gy += step) {
-      for (let gx = minGridX; gx <= maxGridX; gx += step) {
-        const cx = gx * cos - gy * sin + wHalf;
-        const cy = gx * sin + gy * cos + hHalf;
-
-        if (cx < -step || cx >= w + step || cy < -step || cy >= h + step) continue;
-
-        const sampleX = Math.max(0, Math.min(w - 1, Math.round(cx)));
-        const sampleY = Math.max(0, Math.min(h - 1, Math.round(cy)));
-        const si = (sampleY * w + sampleX) * 4;
-        const gray = getGray(imageData.data, si);
-
-        const darkness = 1 - gray;
-        const squareHalf = Math.sqrt(darkness) * sizeMultiplier;
-
-        if (squareHalf < 0.3) continue;
-
-        const extent = squareHalf + edgeSmooth;
-        const minX = Math.max(0, Math.floor(cx - extent));
-        const maxX = Math.min(w - 1, Math.ceil(cx + extent));
-        const minY = Math.max(0, Math.floor(cy - extent));
-        const maxY = Math.min(h - 1, Math.ceil(cy + extent));
-
-        // Pre-calculate rotated basis vectors
-        const negSin = -sin;
-
-        for (let py = minY; py <= maxY; py++) {
-          const dy = py - cy;
-          const dyCos = dy * cos;
-          const dySin = dy * sin;
-          const pyw = py * w;
-          for (let px = minX; px <= maxX; px++) {
-            const dx = px - cx;
-            const rdx = dx * cos + dySin;
-            const rdy = dx * negSin + dyCos;
-
-            const distX = Math.abs(rdx) - squareHalf;
-            const distY = Math.abs(rdy) - squareHalf;
-            const dist = Math.max(distX, distY);
-
-            if (dist < edgeSmooth) {
-              const i = (pyw + px) * 4;
-              const coverage = Math.max(0, Math.min(1, -dist + edgeSmooth));
-              const newVal = Math.round(255 * (1 - coverage));
-              const current = data[i];
-              if (newVal < current) {
-                data[i] = data[i + 1] = data[i + 2] = newVal;
-              }
-            }
+          if (val < data[i]) {
+            data[i] = data[i + 1] = data[i + 2] = val;
           }
         }
       }
     }
     return new ImageData(data, w, h);
   },
+
+  halftoneSquare: (imageData, threshold, size = 6, angle = 0, hardness = 1, options = {}) => {
+    const w = imageData.width, h = imageData.height;
+
+    const {
+      gridType = 'square',
+      dotScaleMin = 0.1,
+      dotScaleMax = 1
+    } = options;
+
+    const map = preprocess(imageData, w, h, options);
+
+    const data = new Uint8ClampedArray(imageData.data);
+    data.fill(255);
+
+    const step = Math.max(1, Math.floor(size));
+    const maxSize = step * 0.85;
+    const rad = (angle * Math.PI) * (1 / 180);
+    const cos = Math.cos(rad), sin = Math.sin(rad);
+    const edgeSmooth = (1 - hardness) * 1.5;
+    const wHalf = w * 0.5;
+    const hHalf = h * 0.5;
+    const baseRadius = maxSize * 0.5;
+
+    // Use same grid logic as Circle (Square, Hex, Radial supported for Squares too!)
+    const diagonal = Math.sqrt(w * w + h * h);
+    const gridExtent = diagonal * 0.7;
+    const minGrid = Math.floor(-gridExtent / step) * step;
+    const maxGrid = Math.ceil(gridExtent / step) * step;
+
+    if (gridType === 'radial') {
+      const maxR = gridExtent;
+      for (let r = 0; r <= maxR; r += step) {
+        const circumference = 2 * Math.PI * r;
+        const dotsCount = r === 0 ? 1 : Math.round(circumference / step);
+        const angleStep = (2 * Math.PI) / dotsCount;
+        for (let i = 0; i < dotsCount; i++) {
+          const theta = i * angleStep + rad;
+          const cx = wHalf + r * Math.cos(theta);
+          const cy = hHalf + r * Math.sin(theta);
+          drawSquare(cx, cy);
+        }
+      }
+    } else {
+      const isHex = gridType === 'hex';
+      let row = 0;
+      for (let gy = minGrid; gy <= maxGrid; gy += (isHex ? step * 0.866 : step)) {
+        const rowOffset = (isHex && row % 2 !== 0) ? step * 0.5 : 0;
+        row++;
+        for (let gx = minGrid; gx <= maxGrid; gx += step) {
+          const cx = (gx + rowOffset) * cos - gy * sin + wHalf;
+          const cy = (gx + rowOffset) * sin + gy * cos + hHalf;
+          drawSquare(cx, cy);
+        }
+      }
+    }
+
+    function drawSquare(cx, cy) {
+      if (cx < -step || cx >= w + step || cy < -step || cy >= h + step) return;
+
+      const sampleX = Math.max(0, Math.min(w - 1, Math.round(cx)));
+      const sampleY = Math.max(0, Math.min(h - 1, Math.round(cy)));
+      const si = sampleY * w + sampleX;
+      const darkness = map[si];
+
+      const relativeSize = dotScaleMin + (darkness * (dotScaleMax - dotScaleMin));
+      let finalHalfSize = baseRadius * relativeSize * threshold;
+
+      if (finalHalfSize < 0.25) return;
+
+      const radiusWithSmooth = finalHalfSize + edgeSmooth;
+
+      const bbRadius = radiusWithSmooth * 1.5;
+      const minX = Math.max(0, Math.floor(cx - bbRadius));
+      const maxX = Math.min(w - 1, Math.ceil(cx + bbRadius));
+      const minY = Math.max(0, Math.floor(cy - bbRadius));
+      const maxY = Math.min(h - 1, Math.ceil(cy + bbRadius));
+
+      for (let py = minY; py <= maxY; py++) {
+        const dy = py - cy;
+        const pyw = py * w;
+        for (let px = minX; px <= maxX; px++) {
+          const dx = px - cx;
+
+          const lu = dx * cos + dy * sin;
+          const lv = -dx * sin + dy * cos;
+
+          const distU = Math.abs(lu);
+          const distV = Math.abs(lv);
+          const dist = Math.max(distU, distV);
+
+          if (dist <= radiusWithSmooth) {
+            const coverage = Math.max(0, Math.min(1, finalHalfSize - dist + edgeSmooth));
+            const val = Math.round(255 * (1 - coverage));
+            const idx = (pyw + px) * 4;
+            if (val < data[idx]) {
+              data[idx] = data[idx + 1] = data[idx + 2] = val;
+            }
+          }
+        }
+      }
+    }
+
+    return new ImageData(data, w, h);
+  },
+
 
   noise: (imageData, threshold, scale = 1) => {
     const data = new Uint8ClampedArray(imageData.data);
