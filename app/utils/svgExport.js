@@ -6,6 +6,7 @@
 import { DEFAULT_PALETTE } from '../constants/palette';
 import { DITHER_ALGORITHMS } from '../constants/ditherAlgorithms';
 import { getGray } from './helpers';
+import { applyBrightnessContrast } from './imageProcessing';
 
 // Coordinate precision for file size optimization
 const PRECISION = 1;
@@ -21,34 +22,40 @@ const MIN_ELEMENT_SIZE = 0.5;
 export function generateLayerSVG(layer, sourceImageData, dimensions, options = {}, palette = DEFAULT_PALETTE) {
   const { width, height } = dimensions;
   const { scaleFactor = 1, includeWrapper = true } = options;
-  
+
   const color = palette[layer.colorKey];
   if (!color) return '';
-  
+
   const algoInfo = DITHER_ALGORITHMS[layer.ditherType];
   let elements = '';
-  
+
+  // Feature: Per-layer brightness/contrast
+  let layerSourceImageData = sourceImageData;
+  if ((layer.brightness && layer.brightness !== 0) || (layer.contrast && layer.contrast !== 0)) {
+    layerSourceImageData = applyBrightnessContrast(sourceImageData, layer.brightness || 0, layer.contrast || 0);
+  }
+
   // Generate pattern based on algorithm type
   if (algoInfo?.category === 'halftone') {
     if (layer.ditherType === 'halftoneCircle') {
-      elements = generateHalftoneCircles(layer, sourceImageData, dimensions, scaleFactor);
+      elements = generateHalftoneCircles(layer, layerSourceImageData, dimensions, scaleFactor);
     } else if (layer.ditherType === 'halftoneSquare') {
-      elements = generateHalftoneSquares(layer, sourceImageData, dimensions, scaleFactor);
+      elements = generateHalftoneSquares(layer, layerSourceImageData, dimensions, scaleFactor);
     } else if (layer.ditherType === 'halftoneLines') {
-      elements = generateHalftoneLines(layer, sourceImageData, dimensions, scaleFactor);
+      elements = generateHalftoneLines(layer, layerSourceImageData, dimensions, scaleFactor);
     }
   } else if (algoInfo?.category === 'ordered') {
-    elements = generateBayerPattern(layer, sourceImageData, dimensions, scaleFactor);
+    elements = generateBayerPattern(layer, layerSourceImageData, dimensions, scaleFactor);
   } else if (algoInfo?.category === 'diffusion') {
-    elements = generateErrorDiffusionPaths(layer, sourceImageData, dimensions, scaleFactor);
+    elements = generateErrorDiffusionPaths(layer, layerSourceImageData, dimensions, scaleFactor);
   } else if (layer.ditherType === 'noise') {
-    elements = generateNoiseStipple(layer, sourceImageData, dimensions, scaleFactor);
+    elements = generateNoiseStipple(layer, layerSourceImageData, dimensions, scaleFactor);
   }
-  
+
   if (!includeWrapper) {
     return elements;
   }
-  
+
   const blendMode = layer.blendMode || 'multiply';
   return `  <g id="${color.name.replace(/\s+/g, '-')}" fill="${color.hex}" opacity="${layer.opacity}" style="mix-blend-mode: ${blendMode};">\n${elements}  </g>\n`;
 }
@@ -61,8 +68,8 @@ function generateHalftoneCircles(layer, sourceImageData, dimensions, scaleFactor
   const data = sourceImageData.data;
   const srcWidth = sourceImageData.width;
   const srcHeight = sourceImageData.height;
-  
-  const step = Math.max(3, Math.floor(layer.scale * scaleFactor));
+
+  const step = Math.max(1, Math.floor(layer.scale * scaleFactor));
   const maxRadius = step * 0.48;
   const rad = (layer.angle * Math.PI) / 180;
   const cos = Math.cos(rad);
@@ -70,56 +77,56 @@ function generateHalftoneCircles(layer, sourceImageData, dimensions, scaleFactor
   const radiusMultiplier = maxRadius * (0.6 + layer.threshold * 0.7);
   const wHalf = width * 0.5;
   const hHalf = height * 0.5;
-  
+
   // Layer offsets (scaled)
   const offsetX = layer.offsetX * scaleFactor;
   const offsetY = layer.offsetY * scaleFactor;
-  
+
   // Calculate tight grid bounds
   const diagonal = Math.sqrt(width * width + height * height);
   const gridExtent = diagonal * 0.6;
   const minGrid = -gridExtent;
   const maxGrid = gridExtent;
-  
+
   let svg = '';
   const circles = [];
-  
+
   for (let gy = minGrid; gy <= maxGrid; gy += step) {
     for (let gx = minGrid; gx <= maxGrid; gx += step) {
       // Calculate element position (where the circle will be drawn)
       const cx = gx * cos - gy * sin + wHalf;
       const cy = gx * sin + gy * cos + hHalf;
-      
+
       // Bounds check for element position
       if (cx < -step || cx >= width + step || cy < -step || cy >= height + step) continue;
-      
+
       // Calculate sample position (where to read from source image)
       // Apply offset here - this shifts what part of the image is sampled for this grid position
       const sampleX = cx - offsetX;
       const sampleY = cy - offsetY;
-      
+
       // Sample from source image at offset position
       const srcX = Math.max(0, Math.min(srcWidth - 1, Math.round(sampleX * srcWidth / width)));
       const srcY = Math.max(0, Math.min(srcHeight - 1, Math.round(sampleY * srcHeight / height)));
       const idx = (srcY * srcWidth + srcX) * 4;
-      
+
       if (idx + 2 < data.length) {
         const gray = getGray(data, idx);
         const darkness = 1 - gray;
         const radius = Math.sqrt(darkness) * radiusMultiplier;
-        
+
         if (radius >= MIN_ELEMENT_SIZE) {
           circles.push({ cx: round(cx), cy: round(cy), r: round(radius) });
         }
       }
     }
   }
-  
+
   // Generate optimized SVG - batch similar radii
   for (const c of circles) {
     svg += `    <circle cx="${c.cx}" cy="${c.cy}" r="${c.r}"/>\n`;
   }
-  
+
   return svg;
 }
 
@@ -131,8 +138,8 @@ function generateHalftoneSquares(layer, sourceImageData, dimensions, scaleFactor
   const data = sourceImageData.data;
   const srcWidth = sourceImageData.width;
   const srcHeight = sourceImageData.height;
-  
-  const step = Math.max(3, Math.floor(layer.scale * scaleFactor));
+
+  const step = Math.max(1, Math.floor(layer.scale * scaleFactor));
   const maxSize = step * 0.85;
   const rad = (layer.angle * Math.PI) / 180;
   const cos = Math.cos(rad);
@@ -140,32 +147,32 @@ function generateHalftoneSquares(layer, sourceImageData, dimensions, scaleFactor
   const sizeMultiplier = maxSize * (0.4 + layer.threshold * 0.6);
   const wHalf = width * 0.5;
   const hHalf = height * 0.5;
-  
+
   const diagonal = Math.sqrt(width * width + height * height);
   const gridExtent = diagonal * 0.6;
   const minGrid = -gridExtent;
   const maxGrid = gridExtent;
-  
+
   let svg = '';
-  
+
   for (let gy = minGrid; gy <= maxGrid; gy += step) {
     for (let gx = minGrid; gx <= maxGrid; gx += step) {
       const offsetGx = gx - (layer.offsetX * scaleFactor);
       const offsetGy = gy - (layer.offsetY * scaleFactor);
       const cx = offsetGx * cos - offsetGy * sin + wHalf;
       const cy = offsetGx * sin + offsetGy * cos + hHalf;
-      
+
       if (cx < -step || cx >= width + step || cy < -step || cy >= height + step) continue;
-      
+
       const srcX = Math.max(0, Math.min(srcWidth - 1, Math.round(cx * srcWidth / width)));
       const srcY = Math.max(0, Math.min(srcHeight - 1, Math.round(cy * srcHeight / height)));
       const idx = (srcY * srcWidth + srcX) * 4;
-      
+
       if (idx + 2 < data.length) {
         const gray = getGray(data, idx);
         const darkness = 1 - gray;
         const size = Math.sqrt(darkness) * sizeMultiplier;
-        
+
         if (size >= MIN_ELEMENT_SIZE) {
           const halfSize = size * 0.5;
           // For rotated squares, use transform
@@ -178,7 +185,7 @@ function generateHalftoneSquares(layer, sourceImageData, dimensions, scaleFactor
       }
     }
   }
-  
+
   return svg;
 }
 
@@ -190,47 +197,47 @@ function generateHalftoneLines(layer, sourceImageData, dimensions, scaleFactor) 
   const data = sourceImageData.data;
   const srcWidth = sourceImageData.width;
   const srcHeight = sourceImageData.height;
-  
-  const spacing = Math.max(3, layer.scale * scaleFactor);
+
+  const spacing = Math.max(1, layer.scale * scaleFactor);
   const rad = (layer.angle * Math.PI) / 180;
   const cos = Math.cos(rad);
   const sin = Math.sin(rad);
   const maxWidth = spacing * 0.7 * (0.5 + layer.threshold * 0.7);
-  
+
   // Generate line segments with varying stroke widths
   const diagonal = Math.sqrt(width * width + height * height);
   const numLines = Math.ceil(diagonal / spacing) * 2;
-  
+
   let svg = '';
-  
+
   for (let i = -numLines; i <= numLines; i++) {
     const lineOffset = i * spacing - (layer.offsetX * scaleFactor);
-    
+
     // Line endpoints (extend beyond canvas)
     const x1 = lineOffset * cos + diagonal * sin;
     const y1 = lineOffset * sin - diagonal * cos;
     const x2 = lineOffset * cos - diagonal * sin;
     const y2 = lineOffset * sin + diagonal * cos;
-    
+
     // Sample along the line to determine stroke width
     const midX = (x1 + x2) / 2 + width / 2;
     const midY = (y1 + y2) / 2 + height / 2;
-    
+
     const srcX = Math.max(0, Math.min(srcWidth - 1, Math.round(midX * srcWidth / width)));
     const srcY = Math.max(0, Math.min(srcHeight - 1, Math.round(midY * srcHeight / height)));
     const idx = (srcY * srcWidth + srcX) * 4;
-    
+
     if (idx + 2 < data.length) {
       const gray = getGray(data, idx);
       const darkness = 1 - gray;
       const strokeWidth = Math.sqrt(darkness) * maxWidth;
-      
+
       if (strokeWidth >= MIN_ELEMENT_SIZE) {
-        svg += `    <line x1="${round(x1 + width/2)}" y1="${round(y1 + height/2)}" x2="${round(x2 + width/2)}" y2="${round(y2 + height/2)}" stroke="currentColor" stroke-width="${round(strokeWidth)}" fill="none"/>\n`;
+        svg += `    <line x1="${round(x1 + width / 2)}" y1="${round(y1 + height / 2)}" x2="${round(x2 + width / 2)}" y2="${round(y2 + height / 2)}" stroke="currentColor" stroke-width="${round(strokeWidth)}" fill="none"/>\n`;
       }
     }
   }
-  
+
   return svg;
 }
 
@@ -242,51 +249,51 @@ function generateBayerPattern(layer, sourceImageData, dimensions, scaleFactor) {
   const data = sourceImageData.data;
   const srcWidth = sourceImageData.width;
   const srcHeight = sourceImageData.height;
-  
-  const pixelSize = Math.max(2, Math.floor(layer.scale * scaleFactor));
+
+  const pixelSize = Math.max(1, Math.floor(layer.scale * scaleFactor));
   const threshold = layer.threshold;
-  
+
   // Get appropriate Bayer matrix size
   let matrixSize = 4;
   if (layer.ditherType === 'bayer2x2') matrixSize = 2;
   else if (layer.ditherType === 'bayer8x8') matrixSize = 8;
-  
+
   // Generate bitmap of which cells are "on"
   const cols = Math.ceil(width / pixelSize);
   const rows = Math.ceil(height / pixelSize);
   const bitmap = new Uint8Array(cols * rows);
-  
+
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
       const x = col * pixelSize + pixelSize / 2;
       const y = row * pixelSize + pixelSize / 2;
-      
+
       const srcX = Math.max(0, Math.min(srcWidth - 1, Math.round(x * srcWidth / width)));
       const srcY = Math.max(0, Math.min(srcHeight - 1, Math.round(y * srcHeight / height)));
       const idx = (srcY * srcWidth + srcX) * 4;
-      
+
       if (idx + 2 < data.length) {
         const gray = getGray(data, idx);
         const mx = col % matrixSize;
         const my = row % matrixSize;
         const bayerValue = getBayerValue(mx, my, matrixSize);
         const thresholdOffset = (threshold - 0.5) * 0.8;
-        
+
         if (gray < bayerValue + thresholdOffset) {
           bitmap[row * cols + col] = 1;
         }
       }
     }
   }
-  
+
   // Convert bitmap to optimized path using horizontal run-length encoding
   let pathData = '';
-  
+
   for (let row = 0; row < rows; row++) {
     let runStart = -1;
     for (let col = 0; col <= cols; col++) {
       const isOn = col < cols && bitmap[row * cols + col];
-      
+
       if (isOn && runStart === -1) {
         runStart = col;
       } else if (!isOn && runStart !== -1) {
@@ -300,7 +307,7 @@ function generateBayerPattern(layer, sourceImageData, dimensions, scaleFactor) {
       }
     }
   }
-  
+
   if (pathData) {
     return `    <path d="${pathData}"/>\n`;
   }
@@ -315,10 +322,10 @@ function getBayerValue(x, y, size) {
     const m = [[0, 2], [3, 1]];
     return m[y % 2][x % 2] / 4;
   } else if (size === 4) {
-    const m = [[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]];
+    const m = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
     return m[y % 4][x % 4] / 16;
   } else {
-    const m = [[0,32,8,40,2,34,10,42],[48,16,56,24,50,18,58,26],[12,44,4,36,14,46,6,38],[60,28,52,20,62,30,54,22],[3,35,11,43,1,33,9,41],[51,19,59,27,49,17,57,25],[15,47,7,39,13,45,5,37],[63,31,55,23,61,29,53,21]];
+    const m = [[0, 32, 8, 40, 2, 34, 10, 42], [48, 16, 56, 24, 50, 18, 58, 26], [12, 44, 4, 36, 14, 46, 6, 38], [60, 28, 52, 20, 62, 30, 54, 22], [3, 35, 11, 43, 1, 33, 9, 41], [51, 19, 59, 27, 49, 17, 57, 25], [15, 47, 7, 39, 13, 45, 5, 37], [63, 31, 55, 23, 61, 29, 53, 21]];
     return m[y % 8][x % 8] / 64;
   }
 }
@@ -331,34 +338,34 @@ function generateErrorDiffusionPaths(layer, sourceImageData, dimensions, scaleFa
   const data = sourceImageData.data;
   const srcWidth = sourceImageData.width;
   const srcHeight = sourceImageData.height;
-  
-  const pixelSize = Math.max(2, Math.floor(layer.scale * scaleFactor));
+
+  const pixelSize = Math.max(1, Math.floor(layer.scale * scaleFactor));
   const threshold = 80 + layer.threshold * 100;
-  
+
   const cols = Math.ceil(width / pixelSize);
   const rows = Math.ceil(height / pixelSize);
-  
+
   // Create grayscale buffer for error diffusion
   const gray = new Float32Array(cols * rows);
-  
+
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
       const x = col * pixelSize + pixelSize / 2;
       const y = row * pixelSize + pixelSize / 2;
-      
+
       const srcX = Math.max(0, Math.min(srcWidth - 1, Math.round(x * srcWidth / width)));
       const srcY = Math.max(0, Math.min(srcHeight - 1, Math.round(y * srcHeight / height)));
       const idx = (srcY * srcWidth + srcX) * 4;
-      
+
       if (idx + 2 < data.length) {
         gray[row * cols + col] = data[idx] * 0.299 + data[idx + 1] * 0.587 + data[idx + 2] * 0.114;
       }
     }
   }
-  
+
   // Apply error diffusion (Floyd-Steinberg or Atkinson)
   const isAtkinson = layer.ditherType === 'atkinson';
-  
+
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
       const i = row * cols + col;
@@ -366,7 +373,7 @@ function generateErrorDiffusionPaths(layer, sourceImageData, dimensions, scaleFa
       const newPixel = oldPixel > threshold ? 255 : 0;
       gray[i] = newPixel;
       const error = oldPixel - newPixel;
-      
+
       if (isAtkinson) {
         const e = error / 8;
         if (col + 1 < cols) gray[i + 1] += e;
@@ -388,15 +395,15 @@ function generateErrorDiffusionPaths(layer, sourceImageData, dimensions, scaleFa
       }
     }
   }
-  
+
   // Convert to bitmap and generate path
   let pathData = '';
-  
+
   for (let row = 0; row < rows; row++) {
     let runStart = -1;
     for (let col = 0; col <= cols; col++) {
       const isOn = col < cols && gray[row * cols + col] < 128;
-      
+
       if (isOn && runStart === -1) {
         runStart = col;
       } else if (!isOn && runStart !== -1) {
@@ -409,7 +416,7 @@ function generateErrorDiffusionPaths(layer, sourceImageData, dimensions, scaleFa
       }
     }
   }
-  
+
   if (pathData) {
     return `    <path d="${pathData}"/>\n`;
   }
@@ -424,43 +431,43 @@ function generateNoiseStipple(layer, sourceImageData, dimensions, scaleFactor) {
   const data = sourceImageData.data;
   const srcWidth = sourceImageData.width;
   const srcHeight = sourceImageData.height;
-  
-  const pixelSize = Math.max(2, Math.floor(layer.scale * scaleFactor));
+
+  const pixelSize = Math.max(1, Math.floor(layer.scale * scaleFactor));
   const decisionThreshold = 0.3 + (1 - layer.threshold) * 0.4;
-  
+
   let svg = '';
   const dotRadius = pixelSize * 0.4;
-  
+
   // Seeded random for consistency
   const seededRandom = (seed) => {
     const x = Math.sin(seed) * 10000;
     return x - Math.floor(x);
   };
-  
+
   const cols = Math.ceil(width / pixelSize);
   const rows = Math.ceil(height / pixelSize);
-  
+
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
       const x = col * pixelSize + pixelSize / 2;
       const y = row * pixelSize + pixelSize / 2;
-      
+
       const srcX = Math.max(0, Math.min(srcWidth - 1, Math.round(x * srcWidth / width)));
       const srcY = Math.max(0, Math.min(srcHeight - 1, Math.round(y * srcHeight / height)));
       const idx = (srcY * srcWidth + srcX) * 4;
-      
+
       if (idx + 2 < data.length) {
         const gray = getGray(data, idx);
         const noise = seededRandom(row * cols + col + 0.5);
         const adjustedThreshold = decisionThreshold + (noise - 0.5) * 0.25;
-        
+
         if (gray < adjustedThreshold && dotRadius >= MIN_ELEMENT_SIZE) {
           svg += `    <circle cx="${round(x)}" cy="${round(y)}" r="${round(dotRadius)}"/>\n`;
         }
       }
     }
   }
-  
+
   return svg;
 }
 
@@ -471,22 +478,22 @@ function generateNoiseStipple(layer, sourceImageData, dimensions, scaleFactor) {
 export function generateCombinedSVG(layers, sourceImageData, dimensions, backgroundColor, options = {}, palette = DEFAULT_PALETTE) {
   const { width, height } = dimensions;
   const { scaleFactor = 1 } = options;
-  
+
   const svgWidth = round(width);
   const svgHeight = round(height);
-  
+
   let svg = `<?xml version="1.0" encoding="UTF-8"?>\n`;
   svg += `<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}">\n`;
   svg += `  <rect id="background" width="100%" height="100%" fill="${backgroundColor}"/>\n`;
-  
+
   // Generate each visible layer
   layers.forEach((layer, index) => {
     if (layer.visible === false) return;
     svg += generateLayerSVG(layer, sourceImageData, dimensions, { scaleFactor, includeWrapper: true }, palette);
   });
-  
+
   svg += `</svg>`;
-  
+
   return svg;
 }
 
@@ -498,16 +505,16 @@ export function generateSingleLayerSVG(layer, sourceImageData, dimensions, backg
   const { width, height } = dimensions;
   const { scaleFactor = 1 } = options;
   const color = palette[layer.colorKey];
-  
+
   const svgWidth = round(width);
   const svgHeight = round(height);
-  
+
   let svg = `<?xml version="1.0" encoding="UTF-8"?>\n`;
   svg += `<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}">\n`;
   svg += `  <rect id="background" width="100%" height="100%" fill="${backgroundColor}"/>\n`;
   svg += generateLayerSVG(layer, sourceImageData, dimensions, { scaleFactor, includeWrapper: true }, palette);
   svg += `</svg>`;
-  
+
   return svg;
 }
 
@@ -532,27 +539,27 @@ export function downloadSVG(svgContent, filename) {
 export function estimateSVGSize(layers, dimensions, scaleFactor = 1) {
   const { width, height } = dimensions;
   let totalElements = 0;
-  
+
   layers.forEach(layer => {
     if (layer.visible === false) return;
-    
+
     const algoInfo = DITHER_ALGORITHMS[layer.ditherType];
-    const step = Math.max(3, Math.floor(layer.scale * scaleFactor));
-    
+    const step = Math.max(1, Math.floor(layer.scale * scaleFactor));
+
     if (algoInfo?.category === 'halftone') {
       // Grid-based: estimate number of dots
       totalElements += Math.ceil(width / step) * Math.ceil(height / step);
     } else {
       // Pixel-based: more elements
-      const pixelSize = Math.max(2, Math.floor(layer.scale * scaleFactor));
+      const pixelSize = Math.max(1, Math.floor(layer.scale * scaleFactor));
       totalElements += Math.ceil(width / pixelSize) * Math.ceil(height / pixelSize) * 0.5; // ~50% coverage
     }
   });
-  
+
   // Rough bytes per element (circle ~40 bytes, rect ~35 bytes, path segment ~10 bytes)
   const bytesPerElement = 30;
   const overhead = 500; // SVG header, groups, etc.
-  
+
   return overhead + totalElements * bytesPerElement;
 }
 
@@ -564,24 +571,24 @@ export async function exportLayersAsZip(layers, sourceImageData, dimensions, bac
   // Dynamically import JSZip to avoid SSR issues
   const JSZip = (await import('jszip')).default;
   const zip = new JSZip();
-  
+
   const { scaleFactor = 1 } = options;
   const visibleLayers = layers.filter(layer => layer.visible !== false);
-  
+
   // Add background SVG
   const bgSvg = generateBackgroundSVG(dimensions, backgroundColor);
   zip.file('00-background.svg', bgSvg);
-  
+
   // Add each layer as separate SVG
   visibleLayers.forEach((layer, index) => {
     const color = palette[layer.colorKey];
     const layerName = color ? color.name.toLowerCase().replace(/\s+/g, '-') : `layer-${index + 1}`;
     const filename = `${String(index + 1).padStart(2, '0')}-${layerName}.svg`;
-    
+
     const svg = generateSingleLayerSVG(layer, sourceImageData, dimensions, 'transparent', { scaleFactor }, palette);
     zip.file(filename, svg);
   });
-  
+
   // Generate and download ZIP
   const blob = await zip.generateAsync({ type: 'blob' });
   const url = URL.createObjectURL(blob);
@@ -601,7 +608,7 @@ function generateBackgroundSVG(dimensions, backgroundColor) {
   const { width, height } = dimensions;
   const svgWidth = round(width);
   const svgHeight = round(height);
-  
+
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}">
   <rect id="background" width="100%" height="100%" fill="${backgroundColor}"/>

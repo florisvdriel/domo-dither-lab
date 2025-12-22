@@ -211,18 +211,19 @@ export const ditherAlgorithms = {
     return new ImageData(data, w, h);
   },
 
-  halftoneCircle: (imageData, threshold, dotSize = 6, angle = 15) => {
+  halftoneCircle: (imageData, threshold, dotSize = 6, angle = 15, hardness = 1) => {
     const data = new Uint8ClampedArray(imageData.data);
     const w = imageData.width, h = imageData.height;
     data.fill(255);
 
-    const step = Math.max(3, Math.floor(dotSize));
+    const step = Math.max(1, Math.floor(dotSize));
     const maxRadius = step * 0.48;
     const rad = (angle * Math.PI) * (1 / 180);
     const cos = Math.cos(rad), sin = Math.sin(rad);
     const radiusMultiplier = maxRadius * (0.6 + threshold * 0.7);
     const radiusThreshold = 0.5;
-    const edgeSmooth = 0.5; // Reduced from 0.7 for crisper but still smooth edges
+    // Hardness 1 = 0 smooth; Hardness 0 = 1.5 smooth
+    const edgeSmooth = (1 - hardness) * 1.5;
     const wHalf = w * 0.5;
     const hHalf = h * 0.5;
 
@@ -288,18 +289,18 @@ export const ditherAlgorithms = {
     return new ImageData(data, w, h);
   },
 
-  halftoneLines: (imageData, threshold, lineSpacing = 4, angle = 45) => {
+  halftoneLines: (imageData, threshold, lineSpacing = 4, angle = 45, hardness = 1) => {
     const data = new Uint8ClampedArray(imageData.data);
     const w = imageData.width, h = imageData.height;
     data.fill(255);
 
     const rad = (angle * Math.PI) * (1 / 180);
     const cos = Math.cos(rad), sin = Math.sin(rad);
-    const spacing = Math.max(3, lineSpacing);
+    const spacing = Math.max(1, lineSpacing);
     const maxWidth = spacing * 0.7;
     const widthMultiplier = maxWidth * (0.5 + threshold * 0.7);
     const spacingHalf = spacing * 0.5;
-    const edgeSmooth = 0.5; // Reduced from 0.7 for crisper but still smooth edges
+    const edgeSmooth = (1 - hardness) * 1.5;
 
     for (let y = 0; y < h; y++) {
       const yw = y * w;
@@ -327,17 +328,17 @@ export const ditherAlgorithms = {
     return new ImageData(data, w, h);
   },
 
-  halftoneSquare: (imageData, threshold, size = 6, angle = 0) => {
+  halftoneSquare: (imageData, threshold, size = 6, angle = 0, hardness = 1) => {
     const data = new Uint8ClampedArray(imageData.data);
     const w = imageData.width, h = imageData.height;
     data.fill(255);
 
-    const step = Math.max(3, Math.floor(size));
+    const step = Math.max(1, Math.floor(size));
     const maxSize = step * 0.85;
     const rad = (angle * Math.PI) * (1 / 180);
     const cos = Math.cos(rad), sin = Math.sin(rad);
     const sizeMultiplier = maxSize * (0.4 + threshold * 0.6) * 0.5;
-    const edgeSmooth = 0.5; // Reduced from 0.7 for crisper but still smooth edges
+    const edgeSmooth = (1 - hardness) * 1.5;
     const wHalf = w * 0.5;
     const hHalf = h * 0.5;
 

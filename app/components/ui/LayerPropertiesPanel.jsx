@@ -62,15 +62,49 @@ export default function LayerPropertiesPanel({
           debounceMs={50}
         />
 
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '16px', marginBottom: '8px' }}>
+          <Slider
+            label={`BRIGHT ${layer.brightness > 0 ? '+' : ''}${Math.round((layer.brightness || 0) * 100)}`}
+            value={layer.brightness || 0}
+            min={-0.5}
+            max={0.5}
+            step={0.05}
+            onChange={(v) => onUpdate({ ...layer, brightness: v })}
+            debounceMs={50}
+          />
+          <Slider
+            label={`CONTRAST ${layer.contrast > 0 ? '+' : ''}${Math.round((layer.contrast || 0) * 100)}`}
+            value={layer.contrast || 0}
+            min={-0.5}
+            max={0.5}
+            step={0.05}
+            onChange={(v) => onUpdate({ ...layer, contrast: v })}
+            debounceMs={50}
+          />
+        </div>
+
         {/* Size (if applicable) */}
         {algoInfo?.hasScale && (
           <Slider
             label={`SIZE ${layer.scale}px`}
             value={layer.scale}
-            min={2}
-            max={32}
+            min={1}
+            max={64}
             step={1}
             onChange={(v) => onUpdate({ ...layer, scale: v })}
+            debounceMs={50}
+          />
+        )}
+
+        {/* Hardness (Halftone only) */}
+        {algoInfo?.category === 'halftone' && (
+          <Slider
+            label={`HARDNESS ${Math.round((layer.hardness ?? 1) * 100)}%`}
+            value={layer.hardness ?? 1}
+            min={0}
+            max={1}
+            step={0.05}
+            onChange={(v) => onUpdate({ ...layer, hardness: v })}
             debounceMs={50}
           />
         )}

@@ -257,7 +257,10 @@ export default function HalftoneLab() {
     offsetY: layers.length * 5,
     blendMode: 'multiply',
     opacity: 1,
-    visible: true
+    visible: true,
+    brightness: 0,
+    contrast: 0,
+    hardness: 1
   });
 
   const addLayer = () => {
@@ -603,7 +606,10 @@ export default function HalftoneLab() {
       offsetY: Math.floor(-20 + Math.random() * 40),
       blendMode: 'multiply',
       opacity: 0.9 + Math.random() * 0.1,
-      visible: true
+      visible: true,
+      brightness: 0,
+      contrast: 0,
+      hardness: 0.95
     });
 
     setLayers(prevLayers => {
@@ -722,12 +728,12 @@ export default function HalftoneLab() {
 
   // Core image processing function (viewport architecture)
   // Processes the preview image and renders to the target canvas
-  const processImageCore = useCallback((sourceImage, targetCanvas) => {
+  const processImageCore = useCallback(async (sourceImage, targetCanvas) => {
     if (!sourceImage || !targetCanvas) return;
 
     const ctx = targetCanvas.getContext('2d');
     ctx.imageSmoothingEnabled = false; // Crisp nearest-neighbor scaling
-    
+
     const sourceCanvas = document.createElement('canvas');
     const sourceCtx = sourceCanvas.getContext('2d');
     sourceCtx.imageSmoothingEnabled = false; // Crisp nearest-neighbor scaling
@@ -736,8 +742,12 @@ export default function HalftoneLab() {
     const outputWidth = sourceImage.width;
     const outputHeight = sourceImage.height;
 
-    targetCanvas.width = outputWidth;
-    targetCanvas.height = outputHeight;
+    // We defer touching targetCanvas until we have the final result to avoid flickering
+    // Create an offscreen buffer for composition
+    const compCanvas = document.createElement('canvas');
+    compCanvas.width = outputWidth;
+    compCanvas.height = outputHeight;
+    const compCtx = compCanvas.getContext('2d');
 
     // Apply image scale setting for processing resolution
     const scaledWidth = Math.round(sourceImage.width * debouncedImageScale);
@@ -765,10 +775,10 @@ export default function HalftoneLab() {
       sourceData = invertImageData(sourceData);
     }
 
-    // Layer mode - fill background first
-    ctx.fillStyle = backgroundColor;
-    ctx.fillRect(0, 0, outputWidth, outputHeight);
-    const baseImageData = ctx.getImageData(0, 0, outputWidth, outputHeight);
+    // Layer mode - fill background first on offscreen canvas
+    compCtx.fillStyle = backgroundColor;
+    compCtx.fillRect(0, 0, outputWidth, outputHeight);
+    const baseImageData = compCtx.getImageData(0, 0, outputWidth, outputHeight);
     const baseData = baseImageData.data;
 
     const inv255 = 1 / 255;
@@ -779,108 +789,174 @@ export default function HalftoneLab() {
 
     // For both preview and export, use direct 1:1 pixel mapping
     // Preview uses previewImage (already limited to PREVIEW_MAX_WIDTH) so it matches visually
-    for (let li = 0; li < visibleLayers.length; li++) {
-      const layer = visibleLayers[li];
-
-      const algo = ditherAlgorithms[layer.ditherType];
-      const algoInfo = DITHER_ALGORITHMS[layer.ditherType];
-
-      if (!algo) continue;
-
-      // Use layer scale directly for dithering
-      let ditheredData;
-      if (algoInfo.hasScale && algoInfo.hasAngle) {
-        ditheredData = algo(sourceData, layer.threshold, layer.scale, layer.angle);
-      } else if (algoInfo.hasScale) {
-        ditheredData = algo(sourceData, layer.threshold, layer.scale);
-      } else {
-        ditheredData = algo(sourceData, layer.threshold);
+    // Use worker for off-main-thread processing
+    try {
+      // Cancel any pending operations to prevent race conditions
+      if (workerDither && workerDither.cancelAll) {
+        workerDither.cancelAll();
       }
 
-      // Apply ink bleed to layer if enabled
-      if (inkBleed && debouncedInkBleedAmount > 0) {
-        ditheredData = applyInkBleed(ditheredData, debouncedInkBleedAmount, debouncedInkBleedRoughness, 1);
-      }
+      // Prepare promises for parallel layer processing
+      const layerPromises = visibleLayers.map(async (layer) => {
+        const algoInfo = DITHER_ALGORITHMS[layer.ditherType];
 
-      // Get palette color with fallback to prevent flicker during palette transitions
-      let paletteColor = activePalette[layer.colorKey];
-      if (!paletteColor && colorKeys.length > 0) {
-        // Fallback to color at same index position to minimize visual disruption
-        paletteColor = activePalette[colorKeys[li % colorKeys.length]];
-      }
-      // Final fallback if still no color found
-      if (!paletteColor) {
-        paletteColor = { rgb: [128, 128, 128] };
-      }
-      const r = paletteColor.rgb[0];
-      const g = paletteColor.rgb[1];
-      const b = paletteColor.rgb[2];
-      const blendFn = blendModes[layer.blendMode] || blendModes.multiply;
-      const layerOpacity = layer.opacity;
-      const layerOffsetX = layer.offsetX;
-      const layerOffsetY = layer.offsetY;
-      const ditheredDataArray = ditheredData.data;
+        if (!algoInfo) return null;
 
-      // Check if we can use direct 1:1 mapping (no scaling needed)
-      const isDirectMapping = scaledWidth === outputWidth && scaledHeight === outputHeight;
+        // Feature: Per-layer brightness/contrast
+        // We do this on main thread as it's fast (pixel manipulation) and avoids transferring large buffers back and forth just for this
+        let layerSourceData = sourceData;
+        if ((layer.brightness && layer.brightness !== 0) || (layer.contrast && layer.contrast !== 0)) {
+          layerSourceData = applyBrightnessContrast(sourceData, layer.brightness || 0, layer.contrast || 0);
+        }
 
-      if (isDirectMapping) {
-        // Fast path: direct 1:1 pixel copy with offset
-        for (let y = 0; y < outputHeight; y++) {
-          const sy = y - layerOffsetY;
-          if (sy < 0 || sy >= outputHeight) continue;
+        // Offload heaviest part (dithering) to worker
+        // Worker handles the heavy loop logic
+        if (isWorkerAvailable && workerDither) {
+          const hardness = layer.hardness === undefined ? 1 : layer.hardness;
+          return await workerDither(layer.ditherType, layerSourceData, {
+            threshold: layer.threshold,
+            scale: layer.scale,
+            angle: layer.angle,
+            hardness: hardness
+          }).then(result => ({
+            layerId: layer.id,
+            data: result,
+            // Pass through layer properties needed for composition
+            ...layer
+          }));
+        } else {
+          // Fallback to main thread if worker unavailable
+          const algo = ditherAlgorithms[layer.ditherType];
+          let ditheredData;
 
-          const syw = sy * outputWidth;
-          const yw = y * outputWidth;
+          if (algoInfo.category === 'halftone') {
+            const hardness = layer.hardness === undefined ? 1 : layer.hardness;
+            ditheredData = algo(layerSourceData, layer.threshold, layer.scale, layer.angle, hardness);
+          } else if (algoInfo.hasScale && algoInfo.hasAngle) {
+            ditheredData = algo(layerSourceData, layer.threshold, layer.scale, layer.angle);
+          } else if (algoInfo.hasScale) {
+            ditheredData = algo(layerSourceData, layer.threshold, layer.scale);
+          } else {
+            ditheredData = algo(layerSourceData, layer.threshold);
+          }
 
-          for (let x = 0; x < outputWidth; x++) {
-            const sx = x - layerOffsetX;
-            if (sx < 0 || sx >= outputWidth) continue;
+          return {
+            layerId: layer.id,
+            data: ditheredData,
+            ...layer
+          };
+        }
+      });
 
-            const si = (syw + sx) << 2;
-            const di = (yw + x) << 2;
+      // Wait for all layers to be processed
+      // We filter out nulls if any
+      const results = (await Promise.all(layerPromises)).filter(Boolean);
 
-            const darkness = 1 - (ditheredDataArray[si] * inv255);
-            if (darkness > minDarkness) {
-              const alpha = layerOpacity * darkness;
-              baseData[di] = blendFn(baseData[di], r, alpha);
-              baseData[di + 1] = blendFn(baseData[di + 1], g, alpha);
-              baseData[di + 2] = blendFn(baseData[di + 2], b, alpha);
+      // Composition Loop
+      for (const result of results) {
+        let ditheredData = result.data;
+        const layer = result; // Contains layer props merged in earlier
+
+        // Apply ink bleed to layer if enabled
+        if (inkBleed && debouncedInkBleedAmount > 0) {
+          ditheredData = applyInkBleed(ditheredData, debouncedInkBleedAmount, debouncedInkBleedRoughness, 1);
+        }
+
+        // Get palette color with fallback to prevent flicker during palette transitions
+        let paletteColor = activePalette[layer.colorKey];
+        if (!paletteColor && colorKeys.length > 0) {
+          // Fallback to color at same index position to minimize visual disruption
+          paletteColor = activePalette[colorKeys[li % colorKeys.length]];
+        }
+        // Final fallback if still no color found
+        if (!paletteColor) {
+          paletteColor = { rgb: [128, 128, 128] };
+        }
+        const r = paletteColor.rgb[0];
+        const g = paletteColor.rgb[1];
+        const b = paletteColor.rgb[2];
+        const blendFn = blendModes[layer.blendMode] || blendModes.multiply;
+        const layerOpacity = layer.opacity;
+        const layerOffsetX = layer.offsetX;
+        const layerOffsetY = layer.offsetY;
+        const ditheredDataArray = ditheredData.data;
+
+        // Check if we can use direct 1:1 mapping (no scaling needed)
+        const isDirectMapping = scaledWidth === outputWidth && scaledHeight === outputHeight;
+
+        if (isDirectMapping) {
+          // Fast path: direct 1:1 pixel copy with offset
+          for (let y = 0; y < outputHeight; y++) {
+            const sy = y - layerOffsetY;
+            if (sy < 0 || sy >= outputHeight) continue;
+
+            const syw = sy * outputWidth;
+            const yw = y * outputWidth;
+
+            for (let x = 0; x < outputWidth; x++) {
+              const sx = x - layerOffsetX;
+              if (sx < 0 || sx >= outputWidth) continue;
+
+              const si = (syw + sx) << 2;
+              const di = (yw + x) << 2;
+
+              const darkness = 1 - (ditheredDataArray[si] * inv255);
+              if (darkness > minDarkness) {
+                const alpha = layerOpacity * darkness;
+                baseData[di] = blendFn(baseData[di], r, alpha);
+                baseData[di + 1] = blendFn(baseData[di + 1], g, alpha);
+                baseData[di + 2] = blendFn(baseData[di + 2], b, alpha);
+              }
+            }
+          }
+        } else {
+          // Scaled path: map from output coordinates to dithered data coordinates
+          const scaleX = scaledWidth / outputWidth;
+          const scaleY = scaledHeight / outputHeight;
+
+          for (let y = 0; y < outputHeight; y++) {
+            const sy = Math.round((y - layerOffsetY) * scaleY);
+            if (sy < 0 || sy >= scaledHeight) continue;
+
+            const syw = sy * scaledWidth;
+            const yw = y * outputWidth;
+
+            for (let x = 0; x < outputWidth; x++) {
+              const sx = Math.round((x - layerOffsetX) * scaleX);
+              if (sx < 0 || sx >= scaledWidth) continue;
+
+              const si = (syw + sx) << 2;
+              const di = (yw + x) << 2;
+
+              const darkness = 1 - (ditheredDataArray[si] * inv255);
+              if (darkness > minDarkness) {
+                const alpha = layerOpacity * darkness;
+                baseData[di] = blendFn(baseData[di], r, alpha);
+                baseData[di + 1] = blendFn(baseData[di + 1], g, alpha);
+                baseData[di + 2] = blendFn(baseData[di + 2], b, alpha);
+              }
             }
           }
         }
-      } else {
-        // Scaled path: map from output coordinates to dithered data coordinates
-        const scaleX = scaledWidth / outputWidth;
-        const scaleY = scaledHeight / outputHeight;
-
-        for (let y = 0; y < outputHeight; y++) {
-          const sy = Math.round((y - layerOffsetY) * scaleY);
-          if (sy < 0 || sy >= scaledHeight) continue;
-
-          const syw = sy * scaledWidth;
-          const yw = y * outputWidth;
-
-          for (let x = 0; x < outputWidth; x++) {
-            const sx = Math.round((x - layerOffsetX) * scaleX);
-            if (sx < 0 || sx >= scaledWidth) continue;
-
-            const si = (syw + sx) << 2;
-            const di = (yw + x) << 2;
-
-            const darkness = 1 - (ditheredDataArray[si] * inv255);
-            if (darkness > minDarkness) {
-              const alpha = layerOpacity * darkness;
-              baseData[di] = blendFn(baseData[di], r, alpha);
-              baseData[di + 1] = blendFn(baseData[di + 1], g, alpha);
-              baseData[di + 2] = blendFn(baseData[di + 2], b, alpha);
-            }
-          }
-        }
       }
+
+
+
+      // Final Blit: Only now do we touch the visible canvas
+      // This ensures no flickering or white flashes
+      targetCanvas.width = outputWidth;
+      targetCanvas.height = outputHeight;
+      const finalCtx = targetCanvas.getContext('2d');
+      // Set smoothing again because resizing canvas might reset context state
+      finalCtx.imageSmoothingEnabled = false;
+      finalCtx.putImageData(baseImageData, 0, 0);
+
+    } catch (error) {
+      if (error && error.message !== 'Operation cancelled') {
+        console.error('Rendering error:', error);
+      }
+      // If cancelled, we simply exit without updating the canvas, preserving the previous frame
     }
-
-    ctx.putImageData(baseImageData, 0, 0);
   }, [debouncedImageScale, debouncedBrightness, debouncedContrast, invert, debouncedPreBlur, debouncedLayers, backgroundColor, inkBleed, debouncedInkBleedAmount, debouncedInkBleedRoughness, activePalette, colorKeys]);
 
   // Track pending updates to skip stale processing
@@ -1151,8 +1227,8 @@ export default function HalftoneLab() {
       <div style={{ width: '280px', backgroundColor: COLORS.bg.secondary, borderRight: `1px solid ${COLORS.border.default}`, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
         {/* Header */}
-        <div style={{ 
-          padding: '24px 20px', 
+        <div style={{
+          padding: '24px 20px',
           borderBottom: `2px solid ${COLORS.ink.coral}`,
           background: `linear-gradient(180deg, ${COLORS.bg.primary} 0%, ${COLORS.bg.secondary} 100%)`,
           display: 'flex',
@@ -1161,8 +1237,8 @@ export default function HalftoneLab() {
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div>
-              <h1 style={{ 
-                fontSize: '14px', 
+              <h1 style={{
+                fontSize: '14px',
                 letterSpacing: '0.05em',
                 fontWeight: 600,
                 margin: 0,
@@ -1171,8 +1247,8 @@ export default function HalftoneLab() {
               }}>
                 Halftone Lab
               </h1>
-              <p style={{ 
-                fontSize: '9px', 
+              <p style={{
+                fontSize: '9px',
                 color: COLORS.text.tertiary,
                 margin: '2px 0 0 0',
                 letterSpacing: '0.05em',
@@ -1182,7 +1258,7 @@ export default function HalftoneLab() {
               </p>
             </div>
           </div>
-          
+
           <IconButton onClick={() => setSelection({ type: 'project', id: null })} title="Project settings">⚙</IconButton>
         </div>
 
@@ -1303,7 +1379,7 @@ export default function HalftoneLab() {
                   height: '16px',
                   backgroundColor: COLORS.ink.coral,
                   borderRadius: '2px'
-                }}/>
+                }} />
                 <span>
                   {image.width} × {image.height}
                   {image.width > PREVIEW_MAX_WIDTH && (
