@@ -93,6 +93,7 @@ export default function HalftoneLab() {
   const canvasRef = useRef(null);
   const originalCanvasRef = useRef(null);
   const sourceCanvasRef = useRef(null);
+  const compCanvasRef = useRef(null); // Reusable composition canvas
   const imageWrapperRef = useRef(null);
   const fileInputRef = useRef(null);
   const presetImportRef = useRef(null);
@@ -191,7 +192,8 @@ export default function HalftoneLab() {
   const debouncedImageScale = useDebounce(imageScale, 200);
   const debouncedBrightness = useDebounce(brightness, 100);
   const debouncedContrast = useDebounce(contrast, 100);
-  const debouncedLayers = useDebounce(layers, 100);
+  // REMOVED: Double debouncing of layers - sliders already debounce individually
+  // const debouncedLayers = useDebounce(layers, 100);
   const debouncedInkBleedAmount = useDebounce(inkBleedAmount, 150);
   const debouncedInkBleedRoughness = useDebounce(inkBleedRoughness, 150);
   const debouncedPreBlur = useDebounce(preBlur, 150);
@@ -741,7 +743,9 @@ export default function HalftoneLab() {
     const ctx = targetCanvas.getContext('2d');
     ctx.imageSmoothingEnabled = false; // Crisp nearest-neighbor scaling
 
-    const sourceCanvas = document.createElement('canvas');
+    // Reuse existing sourceCanvas instead of creating new one
+    const sourceCanvas = sourceCanvasRef.current;
+    if (!sourceCanvas) return;
     const sourceCtx = sourceCanvas.getContext('2d');
     sourceCtx.imageSmoothingEnabled = false; // Crisp nearest-neighbor scaling
 
@@ -749,18 +753,28 @@ export default function HalftoneLab() {
     const outputWidth = sourceImage.width;
     const outputHeight = sourceImage.height;
 
-    // We defer touching targetCanvas until we have the final result to avoid flickering
-    // Create an offscreen buffer for composition
-    const compCanvas = document.createElement('canvas');
-    compCanvas.width = outputWidth;
-    compCanvas.height = outputHeight;
+    // Reuse composition canvas instead of creating new one
+    let compCanvas = compCanvasRef.current;
+    if (!compCanvas) {
+      compCanvas = document.createElement('canvas');
+      compCanvasRef.current = compCanvas;
+    }
+    // Resize if needed
+    if (compCanvas.width !== outputWidth || compCanvas.height !== outputHeight) {
+      compCanvas.width = outputWidth;
+      compCanvas.height = outputHeight;
+    }
     const compCtx = compCanvas.getContext('2d');
 
     // Apply image scale setting for processing resolution
     const scaledWidth = Math.round(sourceImage.width * debouncedImageScale);
     const scaledHeight = Math.round(sourceImage.height * debouncedImageScale);
-    sourceCanvas.width = scaledWidth;
-    sourceCanvas.height = scaledHeight;
+
+    // Resize sourceCanvas if needed
+    if (sourceCanvas.width !== scaledWidth || sourceCanvas.height !== scaledHeight) {
+      sourceCanvas.width = scaledWidth;
+      sourceCanvas.height = scaledHeight;
+    }
 
     sourceCtx.fillStyle = '#888888';
     sourceCtx.fillRect(0, 0, scaledWidth, scaledHeight);
@@ -792,7 +806,7 @@ export default function HalftoneLab() {
     const minDarkness = 0.02;
 
     // Process visible layers only
-    const visibleLayers = debouncedLayers.filter(l => l.visible !== false);
+    const visibleLayers = layers.filter(l => l.visible !== false);
 
     // For both preview and export, use direct 1:1 pixel mapping
     // Preview uses previewImage (already limited to PREVIEW_MAX_WIDTH) so it matches visually
@@ -815,7 +829,7 @@ export default function HalftoneLab() {
 
         // Offload heaviest part (dithering) to worker
         // Worker handles the heavy loop logic
-        if (isWorkerAvailable && workerDither) {
+        if (isWorkerAvailable() && workerDither) {
           const hardness = layer.hardness === undefined ? 1 : layer.hardness;
           return await workerDither(layer.ditherType, layerSourceData, {
             threshold: layer.threshold,
@@ -1003,7 +1017,7 @@ export default function HalftoneLab() {
       }
       // If cancelled, we simply exit without updating the canvas, preserving the previous frame
     }
-  }, [debouncedImageScale, debouncedBrightness, debouncedContrast, invert, debouncedPreBlur, debouncedLayers, backgroundColor, inkBleed, debouncedInkBleedAmount, debouncedInkBleedRoughness, activePalette, colorKeys]);
+  }, [debouncedImageScale, debouncedBrightness, debouncedContrast, invert, debouncedPreBlur, layers, backgroundColor, inkBleed, debouncedInkBleedAmount, debouncedInkBleedRoughness, activePalette, colorKeys]);
 
   // Track pending updates to skip stale processing
   const pendingUpdateRef = useRef(0);
@@ -1201,7 +1215,7 @@ export default function HalftoneLab() {
 
       // scaleFactor is 1 since we're processing at target resolution
       const svg = generateCombinedSVG(
-        debouncedLayers,
+        layers,
         sourceImageData,
         dimensions,
         backgroundColor,
@@ -1211,14 +1225,14 @@ export default function HalftoneLab() {
 
       downloadSVG(svg, 'stack-combined.svg');
 
-      const estimatedSize = estimateSVGSize(debouncedLayers, dimensions, 1);
+      const estimatedSize = estimateSVGSize(layers, dimensions, 1);
       const sizeKB = Math.round(estimatedSize / 1024);
       showToast(`Exported combined SVG (~${sizeKB}KB)`);
     } catch (error) {
       console.error('SVG export error:', error);
       showToast('SVG export failed: ' + error.message);
     }
-  }, [image, previewImage, debouncedImageScale, debouncedLayers, backgroundColor, getSourceImageData, activePalette]);
+  }, [image, previewImage, debouncedImageScale, layers, backgroundColor, getSourceImageData, activePalette]);
 
   // Export separate SVG layers as ZIP
   const exportSVGLayers = useCallback(async () => {
@@ -1247,7 +1261,7 @@ export default function HalftoneLab() {
 
       // scaleFactor is 1 since we're processing at target resolution
       await exportLayersAsZip(
-        debouncedLayers,
+        layers,
         sourceImageData,
         dimensions,
         backgroundColor,
@@ -1255,13 +1269,13 @@ export default function HalftoneLab() {
         activePalette
       );
 
-      const visibleLayers = debouncedLayers.filter(l => l.visible !== false);
+      const visibleLayers = layers.filter(l => l.visible !== false);
       showToast(`Exported ${visibleLayers.length} layer${visibleLayers.length !== 1 ? 's' : ''} as ZIP`);
     } catch (error) {
       console.error('SVG layers export error:', error);
       showToast('SVG export failed: ' + error.message);
     }
-  }, [image, previewImage, debouncedImageScale, debouncedLayers, backgroundColor, getSourceImageData, activePalette]);
+  }, [image, previewImage, debouncedImageScale, layers, backgroundColor, getSourceImageData, activePalette]);
 
   return (
     <div style={{ display: 'flex', height: '100vh', backgroundColor: COLORS.bg.primary, color: COLORS.text.primary, fontFamily: FONTS.ui }}>
