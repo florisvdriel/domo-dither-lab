@@ -197,52 +197,11 @@ function preprocess(imageData, w, h, options) {
   const input = imageData.data;
   const output = new Float32Array(len);
 
-  // Contrast factor
-  const cFactor = (259 * (contrast + 255)) / (255 * (259 - contrast));
-  const bOffset = brightness; // -100 to 100 roughly? 
-  // Assuming brightness -100..100 map to -255..255 or just raw 0-255 shift?
-  // Standard formula: factor * (color - 128) + 128 + brightness
-  // Let's stick to simple: val + brightness * 2.55? 
-  // Usually user slider is -100 to 100.
-  // Let's assume passed values are reasonable.
-
   for (let i = 0; i < len; i++) {
     let val = getChannel(input, i * 4, channel);
-
-    // Normalize to 0-255 range implied by getChannel
-
-    // Apply Brightness/Contrast
-    // (val - 128) * contrast + 128 + brightness
-    // Actually typical formula:
-    if (contrast !== 0) {
-      val = cFactor * (val - 128) + 128;
-    }
-    if (brightness !== 0) {
-      val += brightness * 2.55;
-    }
-
-    // Clamp 0-255
-    val = Math.max(0, Math.min(255, val));
-
-    // Normalize to 0-1 for output
     let norm = val / 255;
 
-    // Invert (Input Invert)
-    // For halftone: 1 = Ink (Black), 0 = Paper (White).
-    // Standard image: 1 = White, 0 = Black.
-    // If we want "Invert", we flip.
-    // Usually, Halftone expects "Darkness".
-    // Let's normalize output to be "Amount of Ink" (Darkness).
-    // If original is white (1), Ink is 0.
-    // If original is black (0), Ink is 1.
-
-    // So default mapping: Output = 1 - Input(Intensity).
     let darkness = 1 - norm;
-
-    // Helper: CMYK channels from getChannel returns K (0-255 ink).
-    // If channel is K, getChannel returns "255 - max(r,g,b)" which is Ink amount.
-    // So normalized is Ink.
-    // We shouldn't do "1-norm" for CMYK channels.
     const isInk = ['cyan', 'magenta', 'yellow', 'black'].includes(channel);
     if (isInk) {
       darkness = norm;
@@ -252,7 +211,6 @@ function preprocess(imageData, w, h, options) {
       darkness = 1 - darkness;
     }
 
-    // Clamp (User Input Clamp)
     if (darkness < clampMin) darkness = 0;
     else if (darkness > clampMax) darkness = 1;
     else darkness = (darkness - clampMin) / (clampMax - clampMin);
@@ -260,7 +218,7 @@ function preprocess(imageData, w, h, options) {
     output[i] = darkness;
   }
 
-  // Apply filters in order: blur -> sharpen -> denoise -> tone adjustments -> noise
+  // Apply filters in order: blur -> sharpen -> denoise -> tone adjustments -> brightness/contrast -> noise
   if (preBlur > 0) {
     boxBlur(output, w, h, preBlur);
   }
@@ -275,6 +233,26 @@ function preprocess(imageData, w, h, options) {
 
   if (shadows !== 0 || midtones !== 0 || highlights !== 0) {
     adjustTones(output, shadows, midtones, highlights);
+  }
+
+  // Apply global brightness and contrast on normalized darkness values (0-1 range)
+  if (brightness !== 0 || contrast !== 0) {
+    for (let i = 0; i < len; i++) {
+      let darkness = output[i];
+
+      // Apply contrast: scale around midpoint (0.5)
+      if (contrast !== 0) {
+        const factor = (contrast + 100) / 100; // -100 to 100 -> 0 to 2
+        darkness = (darkness - 0.5) * factor + 0.5;
+      }
+
+      // Apply brightness: shift the darkness value
+      if (brightness !== 0) {
+        darkness -= brightness / 100; // -100 to 100 -> -1 to 1 shift
+      }
+
+      output[i] = Math.max(0, Math.min(1, darkness));
+    }
   }
 
   if (noise > 0) {

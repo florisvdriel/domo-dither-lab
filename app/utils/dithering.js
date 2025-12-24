@@ -177,20 +177,8 @@ function preprocess(imageData, w, h, options) {
   const input = imageData.data;
   const output = new Float32Array(len);
 
-  // Contrast factor
-  const cFactor = contrast !== 0 ? (259 * (contrast + 255)) / (255 * (259 - contrast)) : 1;
-
   for (let i = 0; i < len; i++) {
     let val = getChannel(input, i * 4, channel);
-
-    if (contrast !== 0) {
-      val = cFactor * (val - 128) + 128;
-    }
-    if (brightness !== 0) {
-      val += brightness * 2.55;
-    }
-
-    val = Math.max(0, Math.min(255, val));
     let norm = val / 255;
 
     let darkness = 1 - norm;
@@ -210,7 +198,7 @@ function preprocess(imageData, w, h, options) {
     output[i] = darkness;
   }
 
-  // Apply filters in order: blur -> sharpen -> denoise -> tone adjustments -> noise
+  // Apply filters in order: blur -> sharpen -> denoise -> tone adjustments -> brightness/contrast -> noise
   if (preBlur > 0) {
     boxBlur(output, w, h, preBlur);
   }
@@ -225,6 +213,26 @@ function preprocess(imageData, w, h, options) {
 
   if (shadows !== 0 || midtones !== 0 || highlights !== 0) {
     adjustTones(output, shadows, midtones, highlights);
+  }
+
+  // Apply global brightness and contrast on normalized darkness values (0-1 range)
+  if (brightness !== 0 || contrast !== 0) {
+    for (let i = 0; i < len; i++) {
+      let darkness = output[i];
+
+      // Apply contrast: scale around midpoint (0.5)
+      if (contrast !== 0) {
+        const factor = (contrast + 100) / 100; // -100 to 100 -> 0 to 2
+        darkness = (darkness - 0.5) * factor + 0.5;
+      }
+
+      // Apply brightness: shift the darkness value
+      if (brightness !== 0) {
+        darkness -= brightness / 100; // -100 to 100 -> -1 to 1 shift
+      }
+
+      output[i] = Math.max(0, Math.min(1, darkness));
+    }
   }
 
   if (noise > 0) {
