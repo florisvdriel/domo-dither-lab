@@ -838,7 +838,15 @@ export default function HalftoneLab() {
             dotScaleMax: layer.dotScaleMax === undefined ? 1 : layer.dotScaleMax,
             brightness: layer.brightness || 0,
             contrast: layer.contrast || 0,
-            invert: layer.invert || false
+            invert: layer.invert || false,
+            // New preprocessing properties
+            sharpen: layer.sharpen || 0,
+            sharpenRadius: layer.sharpenRadius || 1,
+            denoise: layer.denoise || 0,
+            noise: layer.noise || 0,
+            shadows: layer.shadows || 0,
+            midtones: layer.midtones || 0,
+            highlights: layer.highlights || 0
           }).then(result => ({
             layerId: layer.id,
             data: result,
@@ -850,21 +858,32 @@ export default function HalftoneLab() {
           const algo = ditherAlgorithms[layer.ditherType];
           let ditheredData;
 
+          const hardness = layer.hardness === undefined ? 1 : layer.hardness;
+          const params = {
+            gridType: layer.gridType || 'square',
+            channel: layer.channel || 'gray',
+            clampMin: layer.clampMin === undefined ? 0 : layer.clampMin,
+            clampMax: layer.clampMax === undefined ? 1 : layer.clampMax,
+            preBlur: layer.preBlur || 0,
+            dotScaleMin: layer.dotScaleMin === undefined ? 0.1 : layer.dotScaleMin,
+            dotScaleMax: layer.dotScaleMax === undefined ? 1 : layer.dotScaleMax,
+            brightness: layer.brightness || 0,
+            contrast: layer.contrast || 0,
+            invert: layer.invert || false,
+            // New preprocessing properties
+            sharpen: layer.sharpen || 0,
+            sharpenRadius: layer.sharpenRadius || 1,
+            denoise: layer.denoise || 0,
+            noise: layer.noise || 0,
+            shadows: layer.shadows || 0,
+            midtones: layer.midtones || 0,
+            highlights: layer.highlights || 0
+          };
+
           if (algoInfo.category === 'halftone') {
-            const hardness = layer.hardness === undefined ? 1 : layer.hardness;
-            const params = {
-              gridType: layer.gridType || 'square',
-              channel: layer.channel || 'gray',
-              clampMin: layer.clampMin === undefined ? 0 : layer.clampMin,
-              clampMax: layer.clampMax === undefined ? 1 : layer.clampMax,
-              preBlur: layer.preBlur || 0,
-              dotScaleMin: layer.dotScaleMin === undefined ? 0.1 : layer.dotScaleMin,
-              dotScaleMax: layer.dotScaleMax === undefined ? 1 : layer.dotScaleMax
-            };
-            // We need to update existing halftone functions to accept options object instead of positional args eventually
-            // For now, let's keep positional + extra obj? Or just pass obj?
-            // The algo signature is fixed in dithering.js currently: (data, threshold, size, angle, hardness)
-            // Refactoring to: (data, threshold, size, angle, hardness, options)
+            ditheredData = algo(layerSourceData, layer.threshold, layer.scale, layer.angle, hardness, params);
+          } else if (algoInfo.category === 'ordered' || algoInfo.category === 'diffusion') {
+            // Ordered and diffusion algorithms now accept options parameter
             ditheredData = algo(layerSourceData, layer.threshold, layer.scale, layer.angle, hardness, params);
           } else if (algoInfo.hasScale && algoInfo.hasAngle) {
             ditheredData = algo(layerSourceData, layer.threshold, layer.scale, layer.angle);

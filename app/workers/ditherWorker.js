@@ -34,6 +34,11 @@ const getChannel = (data, i, channel) => {
   }
 };
 
+function seededRandom(seed) {
+  const x = Math.sin(seed) * 10000;
+  return x - Math.floor(x);
+}
+
 function boxBlur(data, w, h, radius) {
   if (radius < 1) return;
   const len = w * h;
@@ -69,6 +74,106 @@ function boxBlur(data, w, h, radius) {
   }
 }
 
+function sharpenFilter(data, w, h, amount, radius) {
+  if (amount <= 0 || radius < 1) return;
+  const len = w * h;
+  const temp = new Float32Array(len);
+
+  // Create a blurred copy
+  for (let i = 0; i < len; i++) {
+    temp[i] = data[i];
+  }
+  boxBlur(temp, w, h, Math.floor(radius));
+
+  // Unsharp mask: original + (original - blurred) * strength
+  const strength = amount * 1.5; // Scale the amount
+  for (let i = 0; i < len; i++) {
+    const diff = data[i] - temp[i];
+    data[i] = Math.max(0, Math.min(1, data[i] + diff * strength));
+  }
+}
+
+function addNoise(data, w, h, amount) {
+  if (amount <= 0) return;
+  const len = w * h;
+  for (let i = 0; i < len; i++) {
+    const noise = (seededRandom(i + 0.5) - 0.5) * 2; // -1 to 1
+    data[i] = Math.max(0, Math.min(1, data[i] + noise * amount * 0.2));
+  }
+}
+
+function denoiseFilter(data, w, h, amount) {
+  if (amount <= 0) return;
+  const len = w * h;
+  const temp = new Float32Array(len);
+
+  // Copy data to temp
+  for (let i = 0; i < len; i++) {
+    temp[i] = data[i];
+  }
+
+  // Bilateral-style filter: smooth based on similarity, not distance
+  const threshold = 0.1 * (1 - amount); // Lower threshold = more aggressive smoothing
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const idx = y * w + x;
+      const center = temp[idx];
+
+      let sum = center;
+      let count = 1;
+
+      // Check 8 neighbors
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (dx === 0 && dy === 0) continue;
+
+          const nx = x + dx;
+          const ny = y + dy;
+
+          if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+            const nidx = ny * w + nx;
+            const neighbor = temp[nidx];
+
+            // Only average with similar values (edge-preserving)
+            if (Math.abs(neighbor - center) < threshold) {
+              sum += neighbor;
+              count++;
+            }
+          }
+        }
+      }
+
+      // Blend between original and smoothed based on amount
+      data[idx] = center + (sum / count - center) * amount;
+    }
+  }
+}
+
+function adjustTones(data, shadows, midtones, highlights) {
+  if (shadows === 0 && midtones === 0 && highlights === 0) return;
+  const len = data.length;
+
+  for (let i = 0; i < len; i++) {
+    let darkness = data[i]; // 0 = white, 1 = black
+
+    // Calculate weight for each tone region
+    // Shadows affect dark areas (high darkness values)
+    const shadowWeight = Math.pow(darkness, 2);
+    // Highlights affect bright areas (low darkness values)
+    const highlightWeight = Math.pow(1 - darkness, 2);
+    // Midtones affect middle values
+    const midtoneWeight = 1 - shadowWeight - highlightWeight;
+
+    // Apply adjustments (positive = brighten/reduce darkness, negative = darken/increase darkness)
+    darkness -= shadows * shadowWeight * 0.5;
+    darkness -= midtones * midtoneWeight * 0.5;
+    darkness -= highlights * highlightWeight * 0.5;
+
+    data[i] = Math.max(0, Math.min(1, darkness));
+  }
+}
+
 function preprocess(imageData, w, h, options) {
   const {
     channel = 'gray',
@@ -77,7 +182,15 @@ function preprocess(imageData, w, h, options) {
     contrast = 0,
     invert = false,
     clampMin = 0,
-    clampMax = 1
+    clampMax = 1,
+    // New properties for ordered/diffusion
+    sharpen = 0,
+    sharpenRadius = 1,
+    denoise = 0,
+    noise = 0,
+    shadows = 0,
+    midtones = 0,
+    highlights = 0
   } = options;
 
   const len = w * h;
@@ -147,19 +260,28 @@ function preprocess(imageData, w, h, options) {
     output[i] = darkness;
   }
 
-  // Blur
+  // Apply filters in order: blur -> sharpen -> denoise -> tone adjustments -> noise
   if (preBlur > 0) {
     boxBlur(output, w, h, preBlur);
   }
 
+  if (sharpen > 0) {
+    sharpenFilter(output, w, h, sharpen, sharpenRadius);
+  }
+
+  if (denoise > 0) {
+    denoiseFilter(output, w, h, denoise);
+  }
+
+  if (shadows !== 0 || midtones !== 0 || highlights !== 0) {
+    adjustTones(output, shadows, midtones, highlights);
+  }
+
+  if (noise > 0) {
+    addNoise(output, w, h, noise);
+  }
+
   return output;
-}
-
-
-// Seeded random for consistent noise
-function seededRandom(seed) {
-  const x = Math.sin(seed) * 10000;
-  return x - Math.floor(x);
 }
 
 // Bayer matrices
@@ -264,11 +386,15 @@ function generateHilbertPath(width, height) {
 const ditherAlgorithms = {
   none: (imageData) => imageData,
 
-  bayer2x2: (imageData, threshold, scale = 1) => {
-    const data = new Uint8ClampedArray(imageData.data);
+  bayer2x2: (imageData, threshold, scale = 1, angle = 0, hardness = 1, options = {}) => {
     const w = imageData.width, h = imageData.height;
     const matrix = BAYER_2x2;
     const size = 2;
+
+    // Preprocess image with new filters
+    const map = preprocess(imageData, w, h, options);
+
+    const data = new Uint8ClampedArray(imageData.data);
     const thresholdOffset = (threshold - 0.5) * 0.8;
     const pixelScale = Math.max(1, Math.floor(scale));
     const invPixelScale = 1 / pixelScale;
@@ -278,7 +404,8 @@ const ditherAlgorithms = {
       const my = Math.floor(y * invPixelScale) % size;
       for (let x = 0; x < w; x++) {
         const i = (yw + x) * 4;
-        const gray = getGray(data, i);
+        const darkness = map[yw + x];
+        const gray = 1 - darkness; // Keep as 0-1 normalized brightness
         const mx = Math.floor(x * invPixelScale) % size;
         const result = gray > (matrix[my][mx] + thresholdOffset) ? 255 : 0;
         data[i] = data[i + 1] = data[i + 2] = result;
@@ -287,11 +414,15 @@ const ditherAlgorithms = {
     return { data, width: w, height: h };
   },
 
-  bayer4x4: (imageData, threshold, scale = 1) => {
-    const data = new Uint8ClampedArray(imageData.data);
+  bayer4x4: (imageData, threshold, scale = 1, angle = 0, hardness = 1, options = {}) => {
     const w = imageData.width, h = imageData.height;
     const matrix = BAYER_4x4;
     const size = 4;
+
+    // Preprocess image with new filters
+    const map = preprocess(imageData, w, h, options);
+
+    const data = new Uint8ClampedArray(imageData.data);
     const thresholdOffset = (threshold - 0.5) * 0.8;
     const pixelScale = Math.max(1, Math.floor(scale));
     const invPixelScale = 1 / pixelScale;
@@ -301,7 +432,8 @@ const ditherAlgorithms = {
       const my = Math.floor(y * invPixelScale) % size;
       for (let x = 0; x < w; x++) {
         const i = (yw + x) * 4;
-        const gray = getGray(data, i);
+        const darkness = map[yw + x];
+        const gray = 1 - darkness; // Keep as 0-1 normalized brightness
         const mx = Math.floor(x * invPixelScale) % size;
         const result = gray > (matrix[my][mx] + thresholdOffset) ? 255 : 0;
         data[i] = data[i + 1] = data[i + 2] = result;
@@ -310,11 +442,15 @@ const ditherAlgorithms = {
     return { data, width: w, height: h };
   },
 
-  bayer8x8: (imageData, threshold, scale = 1) => {
-    const data = new Uint8ClampedArray(imageData.data);
+  bayer8x8: (imageData, threshold, scale = 1, angle = 0, hardness = 1, options = {}) => {
     const w = imageData.width, h = imageData.height;
     const matrix = BAYER_8x8;
     const size = 8;
+
+    // Preprocess image with new filters
+    const map = preprocess(imageData, w, h, options);
+
+    const data = new Uint8ClampedArray(imageData.data);
     const thresholdOffset = (threshold - 0.5) * 0.8;
     const pixelScale = Math.max(1, Math.floor(scale));
     const invPixelScale = 1 / pixelScale;
@@ -324,7 +460,8 @@ const ditherAlgorithms = {
       const my = Math.floor(y * invPixelScale) % size;
       for (let x = 0; x < w; x++) {
         const i = (yw + x) * 4;
-        const gray = getGray(data, i);
+        const darkness = map[yw + x];
+        const gray = 1 - darkness; // Keep as 0-1 normalized brightness
         const mx = Math.floor(x * invPixelScale) % size;
         const result = gray > (matrix[my][mx] + thresholdOffset) ? 255 : 0;
         data[i] = data[i + 1] = data[i + 2] = result;
@@ -333,9 +470,13 @@ const ditherAlgorithms = {
     return { data, width: w, height: h };
   },
 
-  floydSteinberg: (imageData, threshold, scale = 1) => {
-    const data = new Uint8ClampedArray(imageData.data);
+  floydSteinberg: (imageData, threshold, scale = 1, angle = 0, hardness = 1, options = {}) => {
     const w = imageData.width, h = imageData.height;
+
+    // Preprocess image with new filters
+    const map = preprocess(imageData, w, h, options);
+
+    const data = new Uint8ClampedArray(imageData.data);
     const pixelScale = Math.max(1, Math.floor(scale));
     const thresh = 80 + threshold * 100;
     const invPixelScale = 1 / pixelScale;
@@ -344,6 +485,7 @@ const ditherAlgorithms = {
     const sh = Math.ceil(h * invPixelScale);
     const gray = new Float32Array(sw * sh);
 
+    // Sample from preprocessed map
     for (let sy = 0; sy < sh; sy++) {
       const syStart = sy * pixelScale;
       const syEnd = Math.min(syStart + pixelScale, h);
@@ -355,8 +497,7 @@ const ditherAlgorithms = {
         for (let dy = syStart; dy < syEnd; dy++) {
           const dyw = dy * w;
           for (let dx = sxStart; dx < sxEnd; dx++) {
-            const idx = (dyw + dx) * 4;
-            sum += data[idx] * GRAY_R + data[idx + 1] * GRAY_G + data[idx + 2] * GRAY_B;
+            sum += (1 - map[dyw + dx]) * 255;
             count++;
           }
         }
@@ -400,9 +541,13 @@ const ditherAlgorithms = {
     return { data, width: w, height: h };
   },
 
-  atkinson: (imageData, threshold, scale = 1) => {
-    const data = new Uint8ClampedArray(imageData.data);
+  atkinson: (imageData, threshold, scale = 1, angle = 0, hardness = 1, options = {}) => {
     const w = imageData.width, h = imageData.height;
+
+    // Preprocess image with new filters
+    const map = preprocess(imageData, w, h, options);
+
+    const data = new Uint8ClampedArray(imageData.data);
     const pixelScale = Math.max(1, Math.floor(scale));
     const thresh = 80 + threshold * 100;
     const invPixelScale = 1 / pixelScale;
@@ -411,6 +556,7 @@ const ditherAlgorithms = {
     const sh = Math.ceil(h * invPixelScale);
     const gray = new Float32Array(sw * sh);
 
+    // Sample from preprocessed map
     for (let sy = 0; sy < sh; sy++) {
       const syStart = sy * pixelScale;
       const syEnd = Math.min(syStart + pixelScale, h);
@@ -422,8 +568,7 @@ const ditherAlgorithms = {
         for (let dy = syStart; dy < syEnd; dy++) {
           const dyw = dy * w;
           for (let dx = sxStart; dx < sxEnd; dx++) {
-            const idx = (dyw + dx) * 4;
-            sum += data[idx] * GRAY_R + data[idx + 1] * GRAY_G + data[idx + 2] * GRAY_B;
+            sum += (1 - map[dyw + dx]) * 255;
             count++;
           }
         }
@@ -790,9 +935,13 @@ const ditherAlgorithms = {
   },
 
   // Stucki error diffusion (sharper than Floyd-Steinberg, 42-divisor kernel)
-  stucki: (imageData, threshold, scale = 1) => {
-    const data = new Uint8ClampedArray(imageData.data);
+  stucki: (imageData, threshold, scale = 1, angle = 0, hardness = 1, options = {}) => {
     const w = imageData.width, h = imageData.height;
+
+    // Preprocess image with new filters
+    const map = preprocess(imageData, w, h, options);
+
+    const data = new Uint8ClampedArray(imageData.data);
     const pixelScale = Math.max(1, Math.floor(scale));
     const thresh = 80 + threshold * 100;
     const invPixelScale = 1 / pixelScale;
@@ -801,6 +950,7 @@ const ditherAlgorithms = {
     const sh = Math.ceil(h * invPixelScale);
     const gray = new Float32Array(sw * sh);
 
+    // Sample from preprocessed map
     for (let sy = 0; sy < sh; sy++) {
       const syStart = sy * pixelScale;
       const syEnd = Math.min(syStart + pixelScale, h);
@@ -812,8 +962,7 @@ const ditherAlgorithms = {
         for (let dy = syStart; dy < syEnd; dy++) {
           const dyw = dy * w;
           for (let dx = sxStart; dx < sxEnd; dx++) {
-            const idx = (dyw + dx) * 4;
-            sum += data[idx] * GRAY_R + data[idx + 1] * GRAY_G + data[idx + 2] * GRAY_B;
+            sum += (1 - map[dyw + dx]) * 255;
             count++;
           }
         }
@@ -867,9 +1016,13 @@ const ditherAlgorithms = {
   },
 
   // Sierra error diffusion (32-divisor kernel)
-  sierra: (imageData, threshold, scale = 1) => {
-    const data = new Uint8ClampedArray(imageData.data);
+  sierra: (imageData, threshold, scale = 1, angle = 0, hardness = 1, options = {}) => {
     const w = imageData.width, h = imageData.height;
+
+    // Preprocess image with new filters
+    const map = preprocess(imageData, w, h, options);
+
+    const data = new Uint8ClampedArray(imageData.data);
     const pixelScale = Math.max(1, Math.floor(scale));
     const thresh = 80 + threshold * 100;
     const invPixelScale = 1 / pixelScale;
@@ -878,6 +1031,7 @@ const ditherAlgorithms = {
     const sh = Math.ceil(h * invPixelScale);
     const gray = new Float32Array(sw * sh);
 
+    // Sample from preprocessed map
     for (let sy = 0; sy < sh; sy++) {
       const syStart = sy * pixelScale;
       const syEnd = Math.min(syStart + pixelScale, h);
@@ -889,8 +1043,7 @@ const ditherAlgorithms = {
         for (let dy = syStart; dy < syEnd; dy++) {
           const dyw = dy * w;
           for (let dx = sxStart; dx < sxEnd; dx++) {
-            const idx = (dyw + dx) * 4;
-            sum += data[idx] * GRAY_R + data[idx + 1] * GRAY_G + data[idx + 2] * GRAY_B;
+            sum += (1 - map[dyw + dx]) * 255;
             count++;
           }
         }
@@ -942,9 +1095,13 @@ const ditherAlgorithms = {
   },
 
   // Sierra Two-Row error diffusion (16-divisor kernel)
-  sierraTwoRow: (imageData, threshold, scale = 1) => {
-    const data = new Uint8ClampedArray(imageData.data);
+  sierraTwoRow: (imageData, threshold, scale = 1, angle = 0, hardness = 1, options = {}) => {
     const w = imageData.width, h = imageData.height;
+
+    // Preprocess image with new filters
+    const map = preprocess(imageData, w, h, options);
+
+    const data = new Uint8ClampedArray(imageData.data);
     const pixelScale = Math.max(1, Math.floor(scale));
     const thresh = 80 + threshold * 100;
     const invPixelScale = 1 / pixelScale;
@@ -953,6 +1110,7 @@ const ditherAlgorithms = {
     const sh = Math.ceil(h * invPixelScale);
     const gray = new Float32Array(sw * sh);
 
+    // Sample from preprocessed map
     for (let sy = 0; sy < sh; sy++) {
       const syStart = sy * pixelScale;
       const syEnd = Math.min(syStart + pixelScale, h);
@@ -964,8 +1122,7 @@ const ditherAlgorithms = {
         for (let dy = syStart; dy < syEnd; dy++) {
           const dyw = dy * w;
           for (let dx = sxStart; dx < sxEnd; dx++) {
-            const idx = (dyw + dx) * 4;
-            sum += data[idx] * GRAY_R + data[idx + 1] * GRAY_G + data[idx + 2] * GRAY_B;
+            sum += (1 - map[dyw + dx]) * 255;
             count++;
           }
         }
@@ -1011,9 +1168,13 @@ const ditherAlgorithms = {
   },
 
   // Sierra Lite error diffusion (4-divisor kernel)
-  sierraLite: (imageData, threshold, scale = 1) => {
-    const data = new Uint8ClampedArray(imageData.data);
+  sierraLite: (imageData, threshold, scale = 1, angle = 0, hardness = 1, options = {}) => {
     const w = imageData.width, h = imageData.height;
+
+    // Preprocess image with new filters
+    const map = preprocess(imageData, w, h, options);
+
+    const data = new Uint8ClampedArray(imageData.data);
     const pixelScale = Math.max(1, Math.floor(scale));
     const thresh = 80 + threshold * 100;
     const invPixelScale = 1 / pixelScale;
@@ -1022,6 +1183,7 @@ const ditherAlgorithms = {
     const sh = Math.ceil(h * invPixelScale);
     const gray = new Float32Array(sw * sh);
 
+    // Sample from preprocessed map
     for (let sy = 0; sy < sh; sy++) {
       const syStart = sy * pixelScale;
       const syEnd = Math.min(syStart + pixelScale, h);
@@ -1033,8 +1195,7 @@ const ditherAlgorithms = {
         for (let dy = syStart; dy < syEnd; dy++) {
           const dyw = dy * w;
           for (let dx = sxStart; dx < sxEnd; dx++) {
-            const idx = (dyw + dx) * 4;
-            sum += data[idx] * GRAY_R + data[idx + 1] * GRAY_G + data[idx + 2] * GRAY_B;
+            sum += (1 - map[dyw + dx]) * 255;
             count++;
           }
         }
@@ -1076,9 +1237,13 @@ const ditherAlgorithms = {
   },
 
   // Riemersma dithering using Hilbert curve
-  riemersma: (imageData, threshold, scale = 1) => {
-    const data = new Uint8ClampedArray(imageData.data);
+  riemersma: (imageData, threshold, scale = 1, angle = 0, hardness = 1, options = {}) => {
     const w = imageData.width, h = imageData.height;
+
+    // Preprocess image with new filters
+    const map = preprocess(imageData, w, h, options);
+
+    const data = new Uint8ClampedArray(imageData.data);
     const pixelScale = Math.max(1, Math.floor(scale));
     const thresh = 80 + threshold * 100;
     const invPixelScale = 1 / pixelScale;
@@ -1088,6 +1253,7 @@ const ditherAlgorithms = {
     const gray = new Float32Array(sw * sh);
     const output = new Uint8Array(sw * sh);
 
+    // Sample from preprocessed map
     for (let sy = 0; sy < sh; sy++) {
       const syStart = sy * pixelScale;
       const syEnd = Math.min(syStart + pixelScale, h);
@@ -1099,8 +1265,7 @@ const ditherAlgorithms = {
         for (let dy = syStart; dy < syEnd; dy++) {
           const dyw = dy * w;
           for (let dx = sxStart; dx < sxEnd; dx++) {
-            const idx = (dyw + dx) * 4;
-            sum += data[idx] * GRAY_R + data[idx + 1] * GRAY_G + data[idx + 2] * GRAY_B;
+            sum += (1 - map[dyw + dx]) * 255;
             count++;
           }
         }
@@ -1176,7 +1341,10 @@ self.onmessage = function (e) {
       if (algorithm.startsWith('halftone')) {
         // Pass params object as the 6th argument for advanced controls (gridType, channel, etc)
         result = algo(imageData, threshold, scale, angle, hardness, params);
-      } else if (algorithm === 'noise' || algorithm.startsWith('bayer') || algorithm === 'floydSteinberg' || algorithm === 'atkinson' || algorithm === 'stucki' || algorithm === 'sierra' || algorithm === 'sierraTwoRow' || algorithm === 'sierraLite' || algorithm === 'blueNoise' || algorithm === 'riemersma') {
+      } else if (algorithm === 'noise' || algorithm.startsWith('bayer') || algorithm === 'floydSteinberg' || algorithm === 'atkinson' || algorithm === 'stucki' || algorithm === 'sierra' || algorithm === 'sierraTwoRow' || algorithm === 'sierraLite' || algorithm === 'riemersma') {
+        // Pass all parameters including options for ordered/diffusion algorithms
+        result = algo(imageData, threshold, scale, angle, hardness, params);
+      } else if (algorithm === 'blueNoise') {
         result = algo(imageData, threshold, scale);
       } else {
         result = algo(imageData, threshold);
