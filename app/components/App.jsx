@@ -809,16 +809,9 @@ export default function HalftoneLab() {
 
         if (!algoInfo) return null;
 
-        // Feature: Per-layer brightness/contrast
-        // We do this on main thread as it's fast (pixel manipulation) and avoids transferring large buffers back and forth just for this
+        // Brightness/contrast are now handled in the preprocessing pipeline
+        // So we just use the source data directly
         let layerSourceData = sourceData;
-        // Halftone algorithms handle BC/Invert efficiently in the worker/algo itself
-        // So we skip main-thread processing for them to improve performance
-        const isHalftone = layer.ditherType.startsWith('halftone');
-
-        if (!isHalftone && ((layer.brightness && layer.brightness !== 0) || (layer.contrast && layer.contrast !== 0))) {
-          layerSourceData = applyBrightnessContrast(sourceData, layer.brightness || 0, layer.contrast || 0);
-        }
 
         // Offload heaviest part (dithering) to worker
         // Worker handles the heavy loop logic
