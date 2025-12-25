@@ -62,30 +62,6 @@ export default function LayerPropertiesPanel({
           debounceMs={50}
         />
 
-        {/* Show old brightness/contrast for halftone, new controls for ordered/diffusion */}
-        {algoInfo?.category === 'halftone' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '16px', marginBottom: '8px' }}>
-            <Slider
-              label={`BRIGHT ${layer.brightness > 0 ? '+' : ''}${Math.round((layer.brightness || 0) * 100)}`}
-              value={layer.brightness || 0}
-              min={-0.5}
-              max={0.5}
-              step={0.05}
-              onChange={(v) => onUpdate({ ...layer, brightness: v })}
-              debounceMs={50}
-            />
-            <Slider
-              label={`CONTRAST ${layer.contrast > 0 ? '+' : ''}${Math.round((layer.contrast || 0) * 100)}`}
-              value={layer.contrast || 0}
-              min={-0.5}
-              max={0.5}
-              step={0.05}
-              onChange={(v) => onUpdate({ ...layer, contrast: v })}
-              debounceMs={50}
-            />
-          </div>
-        )}
-
         {/* --- ORDERED & DIFFUSION SPECIFIC CONTROLS --- */}
         {(algoInfo?.category === 'ordered' || algoInfo?.category === 'diffusion') && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px' }}>
