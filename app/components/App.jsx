@@ -204,6 +204,24 @@ export default function HalftoneLab() {
   const debouncedInkBleedRoughness = useDebounce(inkBleedRoughness, 150);
   const debouncedPreBlur = useDebounce(preBlur, 150);
 
+  // Phase 3: Clear layer cache (escape hatch and invalidation)
+  const clearLayerCache = useCallback(() => {
+    layerCacheRef.current.clear();
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Cache] Cleared all cached layers');
+    }
+  }, []);
+
+  // Phase 3: Invalidate cache when global inputs change
+  // This is called whenever global params that affect sourceData change
+  const invalidateGlobalCache = useCallback(() => {
+    globalRevisionRef.current += 1;
+    clearLayerCache();
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[Cache] Global revision bumped to ${globalRevisionRef.current}`);
+    }
+  }, [clearLayerCache]);
+
   // Phase 3: Aggressively invalidate cache when ANY global input changes
   // Conservative approach: over-invalidate rather than under-invalidate
   useEffect(() => {
@@ -789,24 +807,6 @@ export default function HalftoneLab() {
     // JSON.stringify for simple, complete serialization (no hash collisions)
     return JSON.stringify(sig);
   }, []);
-
-  // Phase 3: Clear layer cache (escape hatch and invalidation)
-  const clearLayerCache = useCallback(() => {
-    layerCacheRef.current.clear();
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[Cache] Cleared all cached layers');
-    }
-  }, []);
-
-  // Phase 3: Invalidate cache when global inputs change
-  // This is called whenever global params that affect sourceData change
-  const invalidateGlobalCache = useCallback(() => {
-    globalRevisionRef.current += 1;
-    clearLayerCache();
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`[Cache] Global revision bumped to ${globalRevisionRef.current}`);
-    }
-  }, [clearLayerCache]);
 
   // Core image processing function (viewport architecture)
   // Processes the preview image and renders to the target canvas

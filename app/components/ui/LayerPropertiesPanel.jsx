@@ -443,6 +443,180 @@ export default function LayerPropertiesPanel({
               </div>
             </div>
 
+            {/* 5. GLOBAL ADJUSTMENTS (Brightness & Contrast) */}
+            <div style={{ borderTop: '1px solid #222', paddingTop: '12px' }}>
+              <label style={{ display: 'block', color: '#444', fontSize: '9px', marginBottom: '8px' }}>GLOBAL</label>
+
+              <Slider
+                label={`BRIGHTNESS ${layer.brightness > 0 ? '+' : ''}${layer.brightness || 0}`}
+                value={layer.brightness || 0}
+                min={-100}
+                max={100}
+                step={1}
+                onChange={(v) => onUpdate({ ...layer, brightness: v })}
+                debounceMs={50}
+              />
+
+              <Slider
+                label={`CONTRAST ${layer.contrast > 0 ? '+' : ''}${layer.contrast || 0}`}
+                value={layer.contrast || 0}
+                min={-100}
+                max={100}
+                step={1}
+                onChange={(v) => onUpdate({ ...layer, contrast: v })}
+                debounceMs={50}
+              />
+            </div>
+
+            {/* 6. ADVANCED FILTERING */}
+            <div style={{ borderTop: '1px solid #222', paddingTop: '12px' }}>
+              <label style={{ display: 'block', color: '#444', fontSize: '9px', marginBottom: '8px' }}>FILTERS</label>
+
+              <Slider
+                label={`SHARPEN ${layer.sharpen || 0}`}
+                value={layer.sharpen || 0}
+                min={0}
+                max={10}
+                step={0.5}
+                onChange={(v) => onUpdate({ ...layer, sharpen: v })}
+                debounceMs={150}
+              />
+
+              <Slider
+                label={`SHARPEN RADIUS ${layer.sharpenRadius || 1}px`}
+                value={layer.sharpenRadius || 1}
+                min={1}
+                max={20}
+                step={1}
+                onChange={(v) => onUpdate({ ...layer, sharpenRadius: v })}
+                debounceMs={150}
+              />
+
+              <Slider
+                label={`DENOISE ${Math.round((layer.denoise || 0) * 100)}%`}
+                value={layer.denoise || 0}
+                min={0}
+                max={1}
+                step={0.05}
+                onChange={(v) => onUpdate({ ...layer, denoise: v })}
+                debounceMs={150}
+              />
+
+              <Slider
+                label={`NOISE ${Math.round((layer.noise || 0) * 100)}%`}
+                value={layer.noise || 0}
+                min={0}
+                max={1}
+                step={0.05}
+                onChange={(v) => onUpdate({ ...layer, noise: v })}
+                debounceMs={150}
+              />
+            </div>
+
+            {/* 7. TONE ADJUSTMENTS */}
+            <div style={{ borderTop: '1px solid #222', paddingTop: '12px' }}>
+              <label style={{ display: 'block', color: '#444', fontSize: '9px', marginBottom: '8px' }}>TONE ADJUST</label>
+
+              <Slider
+                label={`SHADOWS ${layer.shadows > 0 ? '+' : ''}${Math.round((layer.shadows || 0) * 100)}`}
+                value={layer.shadows || 0}
+                min={-1}
+                max={1}
+                step={0.05}
+                onChange={(v) => onUpdate({ ...layer, shadows: v })}
+                debounceMs={150}
+              />
+
+              <Slider
+                label={`MIDTONES ${layer.midtones > 0 ? '+' : ''}${Math.round((layer.midtones || 0) * 100)}`}
+                value={layer.midtones || 0}
+                min={-1}
+                max={1}
+                step={0.05}
+                onChange={(v) => onUpdate({ ...layer, midtones: v })}
+                debounceMs={150}
+              />
+
+              <Slider
+                label={`HIGHLIGHTS ${layer.highlights > 0 ? '+' : ''}${Math.round((layer.highlights || 0) * 100)}`}
+                value={layer.highlights || 0}
+                min={-1}
+                max={1}
+                step={0.05}
+                onChange={(v) => onUpdate({ ...layer, highlights: v })}
+                debounceMs={150}
+              />
+            </div>
+
+          </div>
+        )}
+
+        {/* --- ORGANIC NOISE SPECIFIC CONTROLS --- */}
+        {algoInfo?.category === 'other' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px' }}>
+
+            {/* 1. CHANNEL SELECTOR */}
+            <div>
+              <label style={{
+                display: 'block',
+                color: '#666',
+                fontSize: '9px',
+                marginBottom: '6px',
+                fontFamily: 'monospace',
+                letterSpacing: '0.05em'
+              }}>
+                CHANNEL
+              </label>
+              <select
+                value={layer.channel || 'gray'}
+                onChange={(e) => onUpdate({ ...layer, channel: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '6px',
+                  backgroundColor: '#000',
+                  border: '1px solid #333',
+                  color: '#fff',
+                  fontSize: '10px',
+                  fontFamily: 'monospace',
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="gray">GRAYSCALE</option>
+                <option value="red">RED</option>
+                <option value="green">GREEN</option>
+                <option value="blue">BLUE</option>
+                <option value="cyan">CYAN</option>
+                <option value="magenta">MAGENTA</option>
+                <option value="yellow">YELLOW</option>
+                <option value="black">BLACK (K)</option>
+              </select>
+            </div>
+
+            {/* 2. GLOBAL ADJUSTMENTS (Brightness & Contrast) */}
+            <div style={{ borderTop: '1px solid #222', paddingTop: '12px' }}>
+              <label style={{ display: 'block', color: '#444', fontSize: '9px', marginBottom: '8px' }}>GLOBAL</label>
+
+              <Slider
+                label={`BRIGHTNESS ${layer.brightness > 0 ? '+' : ''}${layer.brightness || 0}`}
+                value={layer.brightness || 0}
+                min={-100}
+                max={100}
+                step={1}
+                onChange={(v) => onUpdate({ ...layer, brightness: v })}
+                debounceMs={50}
+              />
+
+              <Slider
+                label={`CONTRAST ${layer.contrast > 0 ? '+' : ''}${layer.contrast || 0}`}
+                value={layer.contrast || 0}
+                min={-100}
+                max={100}
+                step={1}
+                onChange={(v) => onUpdate({ ...layer, contrast: v })}
+                debounceMs={50}
+              />
+            </div>
+
           </div>
         )}
 
