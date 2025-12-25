@@ -593,6 +593,41 @@ export default function LayerPropertiesPanel({
               />
             </div>
 
+            {/* 3. FILTERS (Blur, Denoise, Noise) */}
+            <div style={{ borderTop: '1px solid #222', paddingTop: '12px' }}>
+              <label style={{ display: 'block', color: '#444', fontSize: '9px', marginBottom: '8px' }}>FILTERS</label>
+
+              <Slider
+                label={`BLUR ${layer.preBlur || 0}px`}
+                value={layer.preBlur || 0}
+                min={0}
+                max={20}
+                step={1}
+                onChange={(v) => onUpdate({ ...layer, preBlur: v })}
+                debounceMs={150}
+              />
+
+              <Slider
+                label={`DENOISE ${Math.round((layer.denoise || 0) * 100)}%`}
+                value={layer.denoise || 0}
+                min={0}
+                max={1}
+                step={0.05}
+                onChange={(v) => onUpdate({ ...layer, denoise: v })}
+                debounceMs={150}
+              />
+
+              <Slider
+                label={`NOISE ${Math.round((layer.noise || 0) * 100)}%`}
+                value={layer.noise || 0}
+                min={0}
+                max={1}
+                step={0.05}
+                onChange={(v) => onUpdate({ ...layer, noise: v })}
+                debounceMs={150}
+              />
+            </div>
+
           </div>
         )}
 

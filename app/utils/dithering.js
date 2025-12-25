@@ -733,9 +733,12 @@ export const ditherAlgorithms = {
   },
 
 
-  noise: (imageData, threshold, scale = 1) => {
-    const data = new Uint8ClampedArray(imageData.data);
+  noise: (imageData, threshold, scale = 1, angle = 0, hardness = 1, options = {}) => {
     const w = imageData.width, h = imageData.height;
+
+    const map = preprocess(imageData, w, h, options);
+
+    const data = new Uint8ClampedArray(imageData.data);
     const pixelScale = Math.max(1, Math.floor(scale));
     const decisionThreshold = 0.3 + (1 - threshold) * 0.4;
     const noiseAmount = 0.25;
@@ -747,11 +750,12 @@ export const ditherAlgorithms = {
       const yw = y * w;
       for (let x = 0; x < w; x++) {
         const i = (yw + x) * 4;
-        const gray = getGray(data, i);
+        const darkness = map[yw + x];
+        const brightness = 1 - darkness;
         const sx = Math.floor(x * invPixelScale);
         const noise = seededRandom(sy * sw + sx + 0.5);
         const adjustedThreshold = decisionThreshold + (noise - 0.5) * noiseAmount;
-        const result = gray > adjustedThreshold ? 255 : 0;
+        const result = brightness > adjustedThreshold ? 255 : 0;
         data[i] = data[i + 1] = data[i + 2] = result;
       }
     }
@@ -759,9 +763,12 @@ export const ditherAlgorithms = {
   },
 
   // Blue noise dithering using precomputed 64x64 blue noise texture
-  blueNoise: (imageData, threshold, scale = 1) => {
-    const data = new Uint8ClampedArray(imageData.data);
+  blueNoise: (imageData, threshold, scale = 1, angle = 0, hardness = 1, options = {}) => {
     const w = imageData.width, h = imageData.height;
+
+    const map = preprocess(imageData, w, h, options);
+
+    const data = new Uint8ClampedArray(imageData.data);
     const pixelScale = Math.max(1, Math.floor(scale));
     const thresholdOffset = (threshold - 0.5) * 0.8;
     const invPixelScale = 1 / pixelScale;
@@ -771,10 +778,11 @@ export const ditherAlgorithms = {
       const my = Math.floor(y * invPixelScale) % 64;
       for (let x = 0; x < w; x++) {
         const i = (yw + x) * 4;
-        const gray = getGray(data, i);
+        const darkness = map[yw + x];
+        const brightness = 1 - darkness;
         const mx = Math.floor(x * invPixelScale) % 64;
         const blueNoiseValue = BLUE_NOISE_64[my][mx];
-        const result = gray > (blueNoiseValue + thresholdOffset) ? 255 : 0;
+        const result = brightness > (blueNoiseValue + thresholdOffset) ? 255 : 0;
         data[i] = data[i + 1] = data[i + 2] = result;
       }
     }
