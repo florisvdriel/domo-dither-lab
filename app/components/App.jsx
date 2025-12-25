@@ -100,6 +100,12 @@ export default function HalftoneLab() {
   const canvasContainerRef = useRef(null);
   const processingRef = useRef(false);
 
+  // Phase 3: Per-layer dithering cache
+  // Conservative implementation: cache dithered ImageData to avoid re-dithering unchanged layers
+  const layerCacheRef = useRef(new Map()); // Map<layerId, { signature, imageData, timestamp }>
+  const globalRevisionRef = useRef(0); // Increments when global inputs change (image, brightness, contrast, etc.)
+  const CACHE_VERSION = 1; // Increment to bust all caches on breaking changes
+
   // Web worker for off-main-thread dithering
   const { dither: workerDither, isAvailable: isWorkerAvailable } = useDitherWorker();
 
@@ -197,6 +203,14 @@ export default function HalftoneLab() {
   const debouncedInkBleedAmount = useDebounce(inkBleedAmount, 150);
   const debouncedInkBleedRoughness = useDebounce(inkBleedRoughness, 150);
   const debouncedPreBlur = useDebounce(preBlur, 150);
+
+  // Phase 3: Aggressively invalidate cache when ANY global input changes
+  // Conservative approach: over-invalidate rather than under-invalidate
+  useEffect(() => {
+    // These global params affect the sourceData that all layers use
+    // Any change means ALL cached layers are potentially stale
+    invalidateGlobalCache();
+  }, [debouncedImageScale, debouncedBrightness, debouncedContrast, invert, debouncedPreBlur, invalidateGlobalCache]);
 
   const showToast = (message) => {
     setToastMessage(message);
@@ -694,6 +708,8 @@ export default function HalftoneLab() {
         setImageTransform({ x: 0, y: 0, scale: 1 });
         // Set viewport size to match image dimensions
         setViewportSize({ w: img.width, h: img.height });
+        // Phase 3: Invalidate cache when image changes
+        invalidateGlobalCache();
         showToast('Image loaded');
       };
       img.src = event.target.result;
@@ -734,6 +750,63 @@ export default function HalftoneLab() {
   const resetView = () => {
     setImageTransform({ x: 0, y: 0, scale: 1 });
   };
+
+  // Phase 3: Compute layer signature for cache key
+  // Conservative: Include ALL parameters that could affect dithered output
+  const computeLayerSignature = useCallback((layer, globalRevision) => {
+    // Include EVERY layer parameter that affects dithering
+    const sig = {
+      v: CACHE_VERSION, // Cache version
+      g: globalRevision, // Global revision (image, brightness, contrast, etc.)
+      // Core params
+      ditherType: layer.ditherType,
+      threshold: layer.threshold,
+      scale: layer.scale,
+      angle: layer.angle,
+      hardness: layer.hardness,
+      gridType: layer.gridType,
+      channel: layer.channel,
+      // Clamp
+      clampMin: layer.clampMin,
+      clampMax: layer.clampMax,
+      // Dot scaling (halftone)
+      dotScaleMin: layer.dotScaleMin,
+      dotScaleMax: layer.dotScaleMax,
+      // Per-layer adjustments
+      brightness: layer.brightness,
+      contrast: layer.contrast,
+      invert: layer.invert,
+      preBlur: layer.preBlur,
+      // New preprocessing
+      sharpen: layer.sharpen,
+      sharpenRadius: layer.sharpenRadius,
+      denoise: layer.denoise,
+      noise: layer.noise,
+      shadows: layer.shadows,
+      midtones: layer.midtones,
+      highlights: layer.highlights
+    };
+    // JSON.stringify for simple, complete serialization (no hash collisions)
+    return JSON.stringify(sig);
+  }, []);
+
+  // Phase 3: Clear layer cache (escape hatch and invalidation)
+  const clearLayerCache = useCallback(() => {
+    layerCacheRef.current.clear();
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Cache] Cleared all cached layers');
+    }
+  }, []);
+
+  // Phase 3: Invalidate cache when global inputs change
+  // This is called whenever global params that affect sourceData change
+  const invalidateGlobalCache = useCallback(() => {
+    globalRevisionRef.current += 1;
+    clearLayerCache();
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[Cache] Global revision bumped to ${globalRevisionRef.current}`);
+    }
+  }, [clearLayerCache]);
 
   // Core image processing function (viewport architecture)
   // Processes the preview image and renders to the target canvas
@@ -823,6 +896,27 @@ export default function HalftoneLab() {
 
         if (!algoInfo) return null;
 
+        // Phase 3: Check cache before dithering
+        const currentSignature = computeLayerSignature(layer, globalRevisionRef.current);
+        const cached = layerCacheRef.current.get(layer.id);
+
+        if (cached && cached.signature === currentSignature) {
+          // Cache hit! Reuse existing dithered result
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`[Cache] HIT for layer ${layer.id} (${layer.ditherType})`);
+          }
+          return {
+            layerId: layer.id,
+            data: cached.imageData,
+            ...layer
+          };
+        }
+
+        // Cache miss - need to dither
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`[Cache] MISS for layer ${layer.id} (${layer.ditherType})`);
+        }
+
         // Brightness/contrast are now handled in the preprocessing pipeline
         // So we just use the source data directly
         let layerSourceData = sourceData;
@@ -854,12 +948,20 @@ export default function HalftoneLab() {
             shadows: layer.shadows || 0,
             midtones: layer.midtones || 0,
             highlights: layer.highlights || 0
-          }).then(result => ({
-            layerId: layer.id,
-            data: result,
-            // Pass through layer properties needed for composition
-            ...layer
-          }));
+          }).then(result => {
+            // Phase 3: Update cache with new result
+            layerCacheRef.current.set(layer.id, {
+              signature: currentSignature,
+              imageData: result,
+              timestamp: Date.now()
+            });
+            return {
+              layerId: layer.id,
+              data: result,
+              // Pass through layer properties needed for composition
+              ...layer
+            };
+          });
         } else {
           // Fallback to main thread if worker unavailable
           const algo = ditherAlgorithms[layer.ditherType];
@@ -899,6 +1001,13 @@ export default function HalftoneLab() {
           } else {
             ditheredData = algo(layerSourceData, layer.threshold);
           }
+
+          // Phase 3: Update cache with new result
+          layerCacheRef.current.set(layer.id, {
+            signature: currentSignature,
+            imageData: ditheredData,
+            timestamp: Date.now()
+          });
 
           return {
             layerId: layer.id,
@@ -1587,6 +1696,7 @@ export default function HalftoneLab() {
         invert={invert}
         onInvertChange={setInvert}
         onResetImageAdjustments={resetImageAdjustments}
+        onClearCache={clearLayerCache}
         // Layer properties
         selectedLayer={selectedLayer}
         selectedLayerIndex={selectedLayerIndex}

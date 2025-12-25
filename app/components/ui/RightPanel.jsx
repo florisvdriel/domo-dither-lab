@@ -45,6 +45,7 @@ export default function RightPanel({
   invert,
   onInvertChange,
   onResetImageAdjustments,
+  onClearCache,
   // Layer properties
   selectedLayer,
   selectedLayerIndex,
@@ -85,6 +86,7 @@ export default function RightPanel({
             invert={invert}
             onInvertChange={onInvertChange}
             onReset={onResetImageAdjustments}
+            onClearCache={onClearCache}
           />
         );
       case 'layer':
@@ -177,6 +179,8 @@ export default function RightPanel({
     </div>
   );
 }
+
+
 
 
 

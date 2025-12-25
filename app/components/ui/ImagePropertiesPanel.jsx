@@ -15,7 +15,8 @@ export default function ImagePropertiesPanel({
   onContrastChange,
   invert,
   onInvertChange,
-  onReset
+  onReset,
+  onClearCache
 }) {
   return (
     <div>
@@ -65,10 +66,22 @@ export default function ImagePropertiesPanel({
             RESET
           </Button>
         </div>
+
+        {/* Phase 3: Cache escape hatch (dev mode only) */}
+        {process.env.NODE_ENV === 'development' && (
+          <div style={{ marginTop: '16px', padding: '12px', border: '1px solid #333', borderRadius: '4px' }}>
+            <div style={{ fontSize: '9px', color: '#666', marginBottom: '8px' }}>DEV: CACHE CONTROLS</div>
+            <Button onClick={onClearCache} style={{ width: '100%', fontSize: '9px', color: '#888' }}>
+              CLEAR LAYER CACHE
+            </Button>
+          </div>
+        )}
       </Section>
     </div>
   );
 }
+
+
 
 
 
