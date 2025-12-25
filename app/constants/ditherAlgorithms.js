@@ -16,4 +16,6 @@ export const DITHER_ALGORITHMS = {
   halftoneLines: { name: 'HALFTONE LINES', category: 'halftone', hasScale: true, hasAngle: true, description: 'Engraving-style lines, width varies with tone' },
   halftoneSquare: { name: 'HALFTONE SQUARES', category: 'halftone', hasScale: true, hasAngle: true, description: 'Square dots for a more geometric look' },
   noise: { name: 'NOISE/STIPPLE', category: 'other', hasScale: true, hasAngle: false, description: 'Random stipple pattern, organic texture' },
+  modulation: { name: 'MODULATION', category: 'other', hasScale: true, hasAngle: true, description: 'Wave-like interference patterns, psychedelic effect' },
+  circuit: { name: 'CIRCUIT', category: 'other', hasScale: true, hasAngle: true, description: 'Electronic circuit board traces and pads' },
 };
