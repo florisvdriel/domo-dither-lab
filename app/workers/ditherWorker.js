@@ -1297,6 +1297,115 @@ const ditherAlgorithms = {
       }
     }
     return { data, width: w, height: h };
+  },
+
+  // Modulation dithering - creates wave-like patterns
+  modulation: (imageData, threshold, scale = 8, angle = 0, hardness = 1, options = {}) => {
+    const w = imageData.width, h = imageData.height;
+
+    const map = preprocess(imageData, w, h, options);
+
+    const data = new Uint8ClampedArray(imageData.data);
+    const frequency = Math.max(1, scale) * 0.15;
+    const rad = (angle * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const thresholdOffset = (threshold - 0.5) * 0.6;
+
+    for (let y = 0; y < h; y++) {
+      const yw = y * w;
+      for (let x = 0; x < w; x++) {
+        const i = (yw + x) * 4;
+        const darkness = map[yw + x];
+
+        // Rotate coordinates
+        const rx = x * cos + y * sin;
+        const ry = -x * sin + y * cos;
+
+        // Create modulation pattern using sine waves in both directions
+        const wave1 = Math.sin(rx * frequency) * 0.5 + 0.5;
+        const wave2 = Math.sin(ry * frequency) * 0.5 + 0.5;
+        const modulation = (wave1 + wave2) * 0.5;
+
+        // Modulate threshold based on image darkness and wave pattern
+        const modulatedThreshold = modulation * (1 - darkness * 0.8);
+        const brightness = 1 - darkness;
+
+        const result = brightness > (modulatedThreshold + thresholdOffset) ? 255 : 0;
+        data[i] = data[i + 1] = data[i + 2] = result;
+      }
+    }
+    return { data, width: w, height: h };
+  },
+
+  // Circuit dithering - creates electronic circuit board-like patterns
+  circuit: (imageData, threshold, scale = 8, angle = 0, hardness = 1, options = {}) => {
+    const w = imageData.width, h = imageData.height;
+
+    const map = preprocess(imageData, w, h, options);
+
+    const data = new Uint8ClampedArray(imageData.data);
+    const gridSize = Math.max(2, Math.floor(scale));
+    const rad = (angle * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const thresholdOffset = (threshold - 0.5) * 0.6;
+    const lineWidth = Math.max(1, gridSize * 0.15);
+
+    for (let y = 0; y < h; y++) {
+      const yw = y * w;
+      for (let x = 0; x < w; x++) {
+        const i = (yw + x) * 4;
+        const darkness = map[yw + x];
+
+        // Rotate coordinates
+        const rx = x * cos + y * sin;
+        const ry = -x * sin + y * cos;
+
+        // Create grid pattern
+        const cellX = Math.floor(rx / gridSize);
+        const cellY = Math.floor(ry / gridSize);
+        const localX = ((rx % gridSize) + gridSize) % gridSize;
+        const localY = ((ry % gridSize) + gridSize) % gridSize;
+
+        // Use seeded random for deterministic pattern
+        const cellSeed = cellX * 73856093 ^ cellY * 19349663;
+        const cellRandom = Math.abs(Math.sin(cellSeed * 0.0001));
+
+        // Determine if this cell should have horizontal or vertical lines
+        const isHorizontal = cellRandom > 0.5;
+
+        // Create circuit traces based on darkness
+        let isLine = false;
+        const brightnessThreshold = 1 - darkness + thresholdOffset;
+
+        if (darkness > 0.1) {
+          if (isHorizontal) {
+            // Horizontal traces
+            const distToCenter = Math.abs(localY - gridSize * 0.5);
+            isLine = distToCenter < lineWidth * (darkness + 0.3);
+          } else {
+            // Vertical traces
+            const distToCenter = Math.abs(localX - gridSize * 0.5);
+            isLine = distToCenter < lineWidth * (darkness + 0.3);
+          }
+        }
+
+        // Add connection points (pads) at grid intersections for darker areas
+        const distToCorner = Math.sqrt(
+          Math.pow(localX - gridSize * 0.5, 2) +
+          Math.pow(localY - gridSize * 0.5, 2)
+        );
+        const isPad = distToCorner < gridSize * 0.2 * darkness;
+
+        // Combine line and pad with threshold
+        const circuitValue = (isLine || isPad) ? darkness : 0;
+        const result = circuitValue > (0.3 + thresholdOffset * 0.5) ? 0 : 255;
+
+        data[i] = data[i + 1] = data[i + 2] = result;
+      }
+    }
+    return { data, width: w, height: h };
   }
 };
 
@@ -1319,8 +1428,8 @@ self.onmessage = function (e) {
       if (algorithm.startsWith('halftone')) {
         // Pass params object as the 6th argument for advanced controls (gridType, channel, etc)
         result = algo(imageData, threshold, scale, angle, hardness, params);
-      } else if (algorithm === 'noise' || algorithm.startsWith('bayer') || algorithm === 'floydSteinberg' || algorithm === 'atkinson' || algorithm === 'stucki' || algorithm === 'sierra' || algorithm === 'sierraTwoRow' || algorithm === 'sierraLite' || algorithm === 'riemersma') {
-        // Pass all parameters including options for ordered/diffusion algorithms
+      } else if (algorithm === 'noise' || algorithm.startsWith('bayer') || algorithm === 'floydSteinberg' || algorithm === 'atkinson' || algorithm === 'stucki' || algorithm === 'sierra' || algorithm === 'sierraTwoRow' || algorithm === 'sierraLite' || algorithm === 'riemersma' || algorithm === 'modulation' || algorithm === 'circuit') {
+        // Pass all parameters including options for ordered/diffusion/modulation/circuit algorithms
         result = algo(imageData, threshold, scale, angle, hardness, params);
       } else if (algorithm === 'blueNoise') {
         result = algo(imageData, threshold, scale);
