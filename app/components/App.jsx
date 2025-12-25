@@ -284,7 +284,7 @@ export default function HalftoneLab() {
     id: Date.now(),
     colorKey: colorKeys[layers.length % colorKeys.length],
     ditherType: 'halftoneCircle',
-    threshold: 0.5,
+    threshold: 1.0,
     scale: 8,
     angle: 45 + (layers.length * 30),
     offsetX: layers.length * 5,
