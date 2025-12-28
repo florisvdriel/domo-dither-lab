@@ -706,14 +706,56 @@ export function generateCombinedSVG(layers, sourceImageData, dimensions, backgro
 
   let svg = `<?xml version="1.0" encoding="UTF-8"?>\n`;
   svg += `<svg xmlns="http://www.w3.org/2000/svg" width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}">\n`;
+
+  // Defs for masks
+  let defs = '';
+  let maskCounter = 0;
+
   svg += `  <rect id="background" width="100%" height="100%" fill="${backgroundColor}"/>\n`;
 
-  // Generate each visible layer
+  // Accumulate layer content with knockout support
+  let content = '';
+
   layers.forEach((layer, index) => {
     if (layer.visible === false) return;
-    svg += generateLayerSVG(layer, sourceImageData, dimensions, { scaleFactor, includeWrapper: true }, palette);
+
+    if (layer.knockout) {
+      // Generate knockout geometry without wrapper
+      const knockoutGeometry = generateLayerSVG(layer, sourceImageData, dimensions, { scaleFactor, includeWrapper: false }, palette);
+
+      if (knockoutGeometry.trim()) {
+        // Create inverse mask
+        const maskId = `knockout-mask-${maskCounter++}`;
+        const color = palette[layer.colorKey];
+
+        defs += `  <mask id="${maskId}">\n`;
+        defs += `    <rect width="100%" height="100%" fill="white"/>\n`;
+        defs += `    <g fill="black">\n`;
+        defs += knockoutGeometry;
+        defs += `    </g>\n`;
+        defs += `  </mask>\n`;
+
+        // Wrap accumulated content with mask
+        if (content.trim()) {
+          content = `  <g mask="url(#${maskId})">\n${content}  </g>\n`;
+        }
+
+        // Add knockout layer on top with normal rendering
+        content += generateLayerSVG(layer, sourceImageData, dimensions, { scaleFactor, includeWrapper: true }, palette);
+      }
+    } else {
+      // Normal layer - just append
+      content += generateLayerSVG(layer, sourceImageData, dimensions, { scaleFactor, includeWrapper: true }, palette);
+    }
   });
 
+  // Add defs if any masks were created
+  if (defs) {
+    svg += `  <defs>\n${defs}  </defs>\n`;
+  }
+
+  // Add all layer content
+  svg += content;
   svg += `</svg>`;
 
   return svg;

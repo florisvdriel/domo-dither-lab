@@ -33,6 +33,6 @@ export const DEFAULT_STATE = {
   viewportSize: { w: 1080, h: 1080 },
   imageTransform: { x: 0, y: 0, scale: 1 },
   layers: [
-    { id: 1, colorKey: 'coral', ditherType: 'halftoneCircle', threshold: 1.0, scale: 8, angle: 15, offsetX: 0, offsetY: 0, blendMode: 'multiply', opacity: 1, visible: true }
+    { id: 1, colorKey: 'coral', ditherType: 'halftoneCircle', threshold: 1.0, scale: 8, angle: 15, offsetX: 0, offsetY: 0, blendMode: 'multiply', opacity: 1, visible: true, knockout: false }
   ]
 };

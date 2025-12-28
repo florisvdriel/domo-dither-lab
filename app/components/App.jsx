@@ -301,7 +301,8 @@ export default function HalftoneLab() {
     clampMax: 1,
     preBlur: 0,
     dotScaleMin: 0.1,
-    dotScaleMax: 1
+    dotScaleMax: 1,
+    knockout: false
   });
 
   const addLayer = () => {
@@ -650,7 +651,8 @@ export default function HalftoneLab() {
       visible: true,
       brightness: 0,
       contrast: 0,
-      hardness: 0.95
+      hardness: 0.95,
+      knockout: false
     });
 
     setLayers(prevLayers => {
@@ -878,6 +880,12 @@ export default function HalftoneLab() {
     const inv255 = 1 / 255;
     const minDarkness = 0.02;
 
+    // Convert background color to RGB for knockout
+    const bgRgb = hexToRgb(backgroundColor);
+    const bgR = bgRgb.r;
+    const bgG = bgRgb.g;
+    const bgB = bgRgb.b;
+
     // Process visible layers only
     const visibleLayers = layers.filter(l => l.visible !== false);
 
@@ -1071,6 +1079,13 @@ export default function HalftoneLab() {
 
               const darkness = 1 - (ditheredDataArray[si] * inv255);
               if (darkness > minDarkness) {
+                // Knockout: reset to background where this layer has ink
+                if (layer.knockout) {
+                  baseData[di] = bgR;
+                  baseData[di + 1] = bgG;
+                  baseData[di + 2] = bgB;
+                }
+                // Apply blend
                 const alpha = layerOpacity * darkness;
                 baseData[di] = blendFn(baseData[di], r, alpha);
                 baseData[di + 1] = blendFn(baseData[di + 1], g, alpha);
@@ -1099,6 +1114,13 @@ export default function HalftoneLab() {
 
               const darkness = 1 - (ditheredDataArray[si] * inv255);
               if (darkness > minDarkness) {
+                // Knockout: reset to background where this layer has ink
+                if (layer.knockout) {
+                  baseData[di] = bgR;
+                  baseData[di + 1] = bgG;
+                  baseData[di + 2] = bgB;
+                }
+                // Apply blend
                 const alpha = layerOpacity * darkness;
                 baseData[di] = blendFn(baseData[di], r, alpha);
                 baseData[di + 1] = blendFn(baseData[di + 1], g, alpha);
