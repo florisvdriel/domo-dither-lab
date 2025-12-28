@@ -16,7 +16,10 @@ export default function ImagePropertiesPanel({
   invert,
   onInvertChange,
   onReset,
-  onClearCache
+  onClearCache,
+  // Phase 4: Preprocessing cache controls
+  onClearAllCaches,
+  cacheStats
 }) {
   return (
     <div>
@@ -67,13 +70,30 @@ export default function ImagePropertiesPanel({
           </Button>
         </div>
 
-        {/* Phase 3: Cache escape hatch (dev mode only) */}
+        {/* Phase 3/4: Cache escape hatch (dev mode only) */}
         {process.env.NODE_ENV === 'development' && (
           <div style={{ marginTop: '16px', padding: '12px', border: '1px solid #333', borderRadius: '4px' }}>
             <div style={{ fontSize: '9px', color: '#666', marginBottom: '8px' }}>DEV: CACHE CONTROLS</div>
-            <Button onClick={onClearCache} style={{ width: '100%', fontSize: '9px', color: '#888' }}>
-              CLEAR LAYER CACHE
-            </Button>
+
+            {/* Phase 4: Cache statistics */}
+            {cacheStats && (
+              <div style={{ fontSize: '8px', color: '#555', marginBottom: '8px', fontFamily: 'monospace' }}>
+                Layer cache: {cacheStats.layerCacheSize} entries<br/>
+                Preprocess cache: {cacheStats.preprocessCacheSize} entries
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '4px', flexDirection: 'column' }}>
+              <Button onClick={onClearCache} style={{ width: '100%', fontSize: '9px', color: '#888' }}>
+                CLEAR LAYER CACHE
+              </Button>
+              {/* Phase 4: Clear all caches button */}
+              {onClearAllCaches && (
+                <Button onClick={onClearAllCaches} style={{ width: '100%', fontSize: '9px', color: '#c66' }}>
+                  CLEAR ALL CACHES
+                </Button>
+              )}
+            </div>
           </div>
         )}
       </Section>

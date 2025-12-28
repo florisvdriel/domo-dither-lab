@@ -762,6 +762,99 @@ export const ditherAlgorithms = {
     return new ImageData(data, w, h);
   },
 
+  // Organic stipple: multi-pass jittered grid with density-based dot sizing
+  organicStipple: (imageData, threshold, scale = 6, angle = 0, hardness = 1, options = {}) => {
+    const w = imageData.width, h = imageData.height;
+    const { jitter = 0.5 } = options;
+
+    const map = preprocess(imageData, w, h, options);
+
+    const data = new Uint8ClampedArray(imageData.data);
+    data.fill(255); // Start from white
+
+    const step = Math.max(3, Math.floor(scale));
+    const dotRadius = step * 0.4;
+    const densityThreshold = 0.3 + (1 - threshold) * 0.4;
+    const edgeSmooth = (1 - hardness) * 1.5;
+
+    // Jitter range: 0.5 = current behavior (±step*0.4)
+    const jitterRange = step * 0.8 * jitter;
+
+    // Helper function to draw antialiased circle (similar to halftoneCircle)
+    function drawDot(cx, cy, sizeMultiplier, seed) {
+      if (cx < 0 || cx >= w || cy < 0 || cy >= h) return;
+
+      const sampleX = Math.max(0, Math.min(w - 1, Math.round(cx)));
+      const sampleY = Math.max(0, Math.min(h - 1, Math.round(cy)));
+      const si = sampleY * w + sampleX;
+
+      const darkness = map[si];
+
+      // Density-based dot decision with randomness
+      const random = seededRandom(seed);
+      if (darkness <= densityThreshold * (0.7 + random * 0.6)) return;
+
+      // Dot radius based on darkness
+      const radius = Math.sqrt(darkness) * dotRadius * sizeMultiplier;
+      if (radius < 0.5) return;
+
+      const radiusWithSmooth = radius + edgeSmooth;
+      const radiusSq = radiusWithSmooth * radiusWithSmooth;
+
+      const minX = Math.max(0, Math.floor(cx - radiusWithSmooth));
+      const maxX = Math.min(w - 1, Math.ceil(cx + radiusWithSmooth));
+      const minY = Math.max(0, Math.floor(cy - radiusWithSmooth));
+      const maxY = Math.min(h - 1, Math.ceil(cy + radiusWithSmooth));
+
+      for (let py = minY; py <= maxY; py++) {
+        const dy = py - cy;
+        const dySq = dy * dy;
+        const pyw = py * w;
+        for (let px = minX; px <= maxX; px++) {
+          const dx = px - cx;
+          const distSq = dx * dx + dySq;
+          const dist = Math.sqrt(distSq);
+
+          // Sharper dots with minimal antialiasing (just sub-pixel)
+          if (dist <= radius) {
+            const coverage = dist < radius - 0.5 ? 1 : Math.max(0, radius - dist + 0.5);
+            const inkVal = Math.round(255 * (1 - coverage));
+            const idx = (pyw + px) * 4;
+            // Only darken (additive ink)
+            if (inkVal < data[idx]) {
+              data[idx] = data[idx + 1] = data[idx + 2] = inkVal;
+            }
+          }
+        }
+      }
+    }
+
+    // Multi-pass rendering with different offsets and sizes
+    const passes = [
+      { offsetX: 0, offsetY: 0, sizeMultiplier: 1.0 },
+      { offsetX: step * 0.5, offsetY: step * 0.5, sizeMultiplier: 0.7 },
+      { offsetX: step * 0.25, offsetY: step * 0.75, sizeMultiplier: 0.5 }
+    ];
+
+    passes.forEach((pass, passIndex) => {
+      for (let gy = -step; gy < h + step; gy += step) {
+        for (let gx = -step; gx < w + step; gx += step) {
+          // Deterministic jitter based on grid position
+          const seed = (gx * 73856093) ^ (gy * 19349663) ^ (passIndex * 83492791);
+          const jitterX = (seededRandom(seed + 0.1) - 0.5) * jitterRange;
+          const jitterY = (seededRandom(seed + 0.2) - 0.5) * jitterRange;
+
+          const cx = gx + pass.offsetX + jitterX;
+          const cy = gy + pass.offsetY + jitterY;
+
+          drawDot(cx, cy, pass.sizeMultiplier, seed);
+        }
+      }
+    });
+
+    return new ImageData(data, w, h);
+  },
+
   // Blue noise dithering using precomputed 64x64 blue noise texture
   blueNoise: (imageData, threshold, scale = 1, angle = 0, hardness = 1, options = {}) => {
     const w = imageData.width, h = imageData.height;

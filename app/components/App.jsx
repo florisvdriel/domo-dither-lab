@@ -106,6 +106,12 @@ export default function HalftoneLab() {
   const globalRevisionRef = useRef(0); // Increments when global inputs change (image, brightness, contrast, etc.)
   const CACHE_VERSION = 1; // Increment to bust all caches on breaking changes
 
+  // Phase 4: Preprocessed source data cache
+  // Cache the globally-preprocessed sourceData to avoid redundant preprocessing
+  // when only layer-specific params change (e.g., just changing dither threshold)
+  const preprocessCacheRef = useRef(new Map()); // Map<signature, { imageData, timestamp }>
+  const imageIdRef = useRef(0); // Unique ID for each loaded image
+
   // Web worker for off-main-thread dithering
   const { dither: workerDither, isAvailable: isWorkerAvailable } = useDitherWorker();
 
@@ -212,15 +218,46 @@ export default function HalftoneLab() {
     }
   }, []);
 
+  // Phase 4: Clear preprocessing cache
+  const clearPreprocessCache = useCallback(() => {
+    preprocessCacheRef.current.clear();
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[PreprocessCache] Cleared all cached preprocessing data');
+    }
+  }, []);
+
+  // Phase 4: Clear all caches (layer + preprocess)
+  const clearAllCaches = useCallback(() => {
+    clearLayerCache();
+    clearPreprocessCache();
+  }, [clearLayerCache, clearPreprocessCache]);
+
+  // Phase 4: Compute preprocessing signature for cache key
+  // Only includes params that affect the global preprocessing step
+  const computePreprocessSignature = useCallback((imageId, scale, brightness, contrast, invert, preBlur) => {
+    return JSON.stringify({
+      v: CACHE_VERSION,
+      imageId,
+      scale,
+      brightness,
+      contrast,
+      invert,
+      preBlur
+    });
+  }, []);
+
   // Phase 3: Invalidate cache when global inputs change
   // This is called whenever global params that affect sourceData change
   const invalidateGlobalCache = useCallback(() => {
     globalRevisionRef.current += 1;
     clearLayerCache();
+    // Note: preprocessCache is signature-based, so it self-invalidates when params change
+    // But we clear it anyway to prevent unbounded growth
+    clearPreprocessCache();
     if (process.env.NODE_ENV === 'development') {
       console.log(`[Cache] Global revision bumped to ${globalRevisionRef.current}`);
     }
-  }, [clearLayerCache]);
+  }, [clearLayerCache, clearPreprocessCache]);
 
   // Phase 3: Aggressively invalidate cache when ANY global input changes
   // Conservative approach: over-invalidate rather than under-invalidate
@@ -229,6 +266,12 @@ export default function HalftoneLab() {
     // Any change means ALL cached layers are potentially stale
     invalidateGlobalCache();
   }, [debouncedImageScale, debouncedBrightness, debouncedContrast, invert, debouncedPreBlur, invalidateGlobalCache]);
+
+  // Phase 4: Compute cache statistics for dev tools
+  const cacheStats = useMemo(() => ({
+    layerCacheSize: layerCacheRef.current.size,
+    preprocessCacheSize: preprocessCacheRef.current.size
+  }), [layers, debouncedImageScale, debouncedBrightness, debouncedContrast, invert, debouncedPreBlur]); // Re-compute when caches might change
 
   const showToast = (message) => {
     setToastMessage(message);
@@ -728,6 +771,8 @@ export default function HalftoneLab() {
         setImageTransform({ x: 0, y: 0, scale: 1 });
         // Set viewport size to match image dimensions
         setViewportSize({ w: img.width, h: img.height });
+        // Phase 4: Increment image ID for preprocessing cache
+        imageIdRef.current += 1;
         // Phase 3: Invalidate cache when image changes
         invalidateGlobalCache();
         showToast('Image loaded');
@@ -804,7 +849,9 @@ export default function HalftoneLab() {
       noise: layer.noise,
       shadows: layer.shadows,
       midtones: layer.midtones,
-      highlights: layer.highlights
+      highlights: layer.highlights,
+      // Organic stipple
+      jitter: layer.jitter
     };
     // JSON.stringify for simple, complete serialization (no hash collisions)
     return JSON.stringify(sig);
@@ -851,24 +898,59 @@ export default function HalftoneLab() {
       sourceCanvas.height = scaledHeight;
     }
 
-    sourceCtx.fillStyle = '#888888';
-    sourceCtx.fillRect(0, 0, scaledWidth, scaledHeight);
+    // Phase 4: Check preprocessing cache before doing expensive preprocessing
+    const preprocessSig = computePreprocessSignature(
+      imageIdRef.current,
+      debouncedImageScale,
+      debouncedBrightness,
+      debouncedContrast,
+      invert,
+      debouncedPreBlur
+    );
 
-    // Apply pre-blur if enabled
-    if (debouncedPreBlur > 0) {
-      sourceCtx.filter = `blur(${debouncedPreBlur}px)`;
-    }
-    sourceCtx.drawImage(sourceImage, 0, 0, scaledWidth, scaledHeight);
-    sourceCtx.filter = 'none';
+    const cachedPreprocess = preprocessCacheRef.current.get(preprocessSig);
+    let sourceData;
 
-    let sourceData = sourceCtx.getImageData(0, 0, scaledWidth, scaledHeight);
+    if (cachedPreprocess) {
+      // Cache HIT - reuse preprocessed data!
+      sourceData = cachedPreprocess.imageData;
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[PreprocessCache] HIT - Reusing cached sourceData');
+      }
+    } else {
+      // Cache MISS - need to preprocess
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[PreprocessCache] MISS - Computing sourceData');
+      }
 
-    if (debouncedBrightness !== 0 || debouncedContrast !== 0) {
-      sourceData = applyBrightnessContrast(sourceData, debouncedBrightness, debouncedContrast);
-    }
+      sourceCtx.fillStyle = '#888888';
+      sourceCtx.fillRect(0, 0, scaledWidth, scaledHeight);
 
-    if (invert) {
-      sourceData = invertImageData(sourceData);
+      // Apply pre-blur if enabled
+      if (debouncedPreBlur > 0) {
+        sourceCtx.filter = `blur(${debouncedPreBlur}px)`;
+      }
+      sourceCtx.drawImage(sourceImage, 0, 0, scaledWidth, scaledHeight);
+      sourceCtx.filter = 'none';
+
+      sourceData = sourceCtx.getImageData(0, 0, scaledWidth, scaledHeight);
+
+      if (debouncedBrightness !== 0 || debouncedContrast !== 0) {
+        sourceData = applyBrightnessContrast(sourceData, debouncedBrightness, debouncedContrast);
+      }
+
+      if (invert) {
+        sourceData = invertImageData(sourceData);
+      }
+
+      // Phase 4: Store in preprocessing cache
+      preprocessCacheRef.current.set(preprocessSig, {
+        imageData: sourceData,
+        timestamp: Date.now()
+      });
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[PreprocessCache] Stored new sourceData');
+      }
     }
 
     // Layer mode - fill background first on offscreen canvas
@@ -955,7 +1037,9 @@ export default function HalftoneLab() {
             noise: layer.noise || 0,
             shadows: layer.shadows || 0,
             midtones: layer.midtones || 0,
-            highlights: layer.highlights || 0
+            highlights: layer.highlights || 0,
+            // Organic stipple
+            jitter: layer.jitter ?? 0.5
           }).then(result => {
             // Phase 3: Update cache with new result
             layerCacheRef.current.set(layer.id, {
@@ -994,13 +1078,18 @@ export default function HalftoneLab() {
             noise: layer.noise || 0,
             shadows: layer.shadows || 0,
             midtones: layer.midtones || 0,
-            highlights: layer.highlights || 0
+            highlights: layer.highlights || 0,
+            // Organic stipple
+            jitter: layer.jitter ?? 0.5
           };
 
           if (algoInfo.category === 'halftone') {
             ditheredData = algo(layerSourceData, layer.threshold, layer.scale, layer.angle, hardness, params);
           } else if (algoInfo.category === 'ordered' || algoInfo.category === 'diffusion') {
             // Ordered and diffusion algorithms now accept options parameter
+            ditheredData = algo(layerSourceData, layer.threshold, layer.scale, layer.angle, hardness, params);
+          } else if (layer.ditherType === 'organicStipple') {
+            // organicStipple needs params for jitter
             ditheredData = algo(layerSourceData, layer.threshold, layer.scale, layer.angle, hardness, params);
           } else if (algoInfo.hasScale && algoInfo.hasAngle) {
             ditheredData = algo(layerSourceData, layer.threshold, layer.scale, layer.angle);
@@ -1719,6 +1808,8 @@ export default function HalftoneLab() {
         onInvertChange={setInvert}
         onResetImageAdjustments={resetImageAdjustments}
         onClearCache={clearLayerCache}
+        onClearAllCaches={clearAllCaches}
+        cacheStats={cacheStats}
         // Layer properties
         selectedLayer={selectedLayer}
         selectedLayerIndex={selectedLayerIndex}

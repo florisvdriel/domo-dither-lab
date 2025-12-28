@@ -49,6 +49,13 @@ export const PRESETS = {
       { colorKey: 'gold', ditherType: 'halftoneCircle', threshold: 0.55, scale: 6, angle: 15, offsetX: 0, offsetY: 0, blendMode: 'screen', opacity: 1, visible: true }
     ]
   },
+  organic: {
+    name: 'ORGANIC',
+    description: 'Natural stipple with jitter',
+    layers: [
+      { colorKey: 'navy', ditherType: 'organicStipple', threshold: 0.5, scale: 6, angle: 0, offsetX: 0, offsetY: 0, blendMode: 'multiply', opacity: 1, visible: true, jitter: 0.5 }
+    ]
+  },
   rgbSplit: {
     name: 'RGB SPLIT',
     description: 'Chromatic aberration effect',

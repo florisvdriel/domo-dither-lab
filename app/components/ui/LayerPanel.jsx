@@ -14,7 +14,7 @@ export default function LayerPanel({ layer, index, totalLayers, onUpdate, onRemo
   const [hovering, setHovering] = useState(false);
   const algoInfo = DITHER_ALGORITHMS[layer.ditherType];
   const isVisible = layer.visible !== false; // Default to true if not set
-  
+
   // Use provided palette or fall back to DEFAULT_PALETTE
   const activePalette = palette || DEFAULT_PALETTE;
   
@@ -77,7 +77,7 @@ export default function LayerPanel({ layer, index, totalLayers, onUpdate, onRemo
               {algoInfo?.hasAngle && (
                 <Slider label={`ANGLE ${layer.angle}°`} value={layer.angle} min={0} max={180} step={5} onChange={(v) => onUpdate({ ...layer, angle: v })} debounceMs={50} />
               )}
-              
+
               {/* X/Y Offset sliders - prominent for misregistered screenprint look */}
               <div style={{ 
                 borderTop: '1px solid #222', 

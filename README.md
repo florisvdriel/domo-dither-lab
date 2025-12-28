@@ -14,7 +14,7 @@ Built as a research & development exploration of:
 
 ## Features
 
-- **Multiple dithering algorithms**: Halftone dots/lines/squares, Bayer matrices, Floyd-Steinberg, Atkinson, noise
+- **Multiple dithering algorithms**: Halftone dots/lines/squares, Bayer matrices, Floyd-Steinberg, Atkinson, noise, organic stipple with density variation
 - **Layer system**: Up to 4 color layers with individual patterns, offsets, and blend modes
 - **Gradient mapping**: Multi-stop color gradients with optional dithering
 - **Analog effects**: Ink bleed simulation, paper texture overlay

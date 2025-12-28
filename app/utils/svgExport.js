@@ -150,6 +150,8 @@ export function generateLayerSVG(layer, sourceImageData, dimensions, options = {
     elements = generateErrorDiffusionPaths(layer, layerSourceImageData, dimensions, scaleFactor);
   } else if (layer.ditherType === 'noise') {
     elements = generateNoiseStipple(layer, layerSourceImageData, dimensions, scaleFactor);
+  } else if (layer.ditherType === 'organicStipple') {
+    elements = generateOrganicStipple(layer, layerSourceImageData, dimensions, scaleFactor);
   }
 
   if (!includeWrapper) {
@@ -689,6 +691,87 @@ function generateNoiseStipple(layer, sourceImageData, dimensions, scaleFactor) {
       }
     }
   }
+
+  return svg;
+}
+
+/**
+ * Generate organic stipple pattern with multi-pass jittered grid
+ */
+function generateOrganicStipple(layer, sourceImageData, dimensions, scaleFactor) {
+  const { width, height } = dimensions;
+  const srcWidth = sourceImageData.width;
+  const srcHeight = sourceImageData.height;
+
+  // Preprocess source data
+  const preOptions = {
+    channel: layer.channel || 'gray',
+    brightness: layer.brightness || 0,
+    contrast: layer.contrast || 0,
+    invert: layer.invert || false,
+    clampMin: layer.clampMin === undefined ? 0 : layer.clampMin,
+    clampMax: layer.clampMax === undefined ? 1 : layer.clampMax,
+    preBlur: layer.preBlur || 0
+  };
+  const map = preprocess(sourceImageData, srcWidth, srcHeight, preOptions);
+
+  const step = Math.max(3, Math.floor(layer.scale * scaleFactor));
+  const dotRadius = step * 0.4;
+  const densityThreshold = 0.3 + (1 - layer.threshold) * 0.4;
+  const jitter = layer.jitter ?? 0.5;
+  const jitterRange = step * 0.8 * jitter;
+
+  // Seeded random for deterministic pattern
+  const seededRandom = (seed) => {
+    const x = Math.sin(seed) * 10000;
+    return x - Math.floor(x);
+  };
+
+  // Apply layer offsets
+  const offsetX = (layer.offsetX || 0) * scaleFactor;
+  const offsetY = (layer.offsetY || 0) * scaleFactor;
+
+  let svg = '';
+
+  // Multi-pass rendering
+  const passes = [
+    { offsetX: 0, offsetY: 0, sizeMultiplier: 1.0 },
+    { offsetX: step * 0.5, offsetY: step * 0.5, sizeMultiplier: 0.7 },
+    { offsetX: step * 0.25, offsetY: step * 0.75, sizeMultiplier: 0.5 }
+  ];
+
+  passes.forEach((pass, passIndex) => {
+    for (let gy = -step; gy < height + step; gy += step) {
+      for (let gx = -step; gx < width + step; gx += step) {
+        // Deterministic jitter based on grid position
+        const seed = (gx * 73856093) ^ (gy * 19349663) ^ (passIndex * 83492791);
+        const jitterX = (seededRandom(seed + 0.1) - 0.5) * jitterRange;
+        const jitterY = (seededRandom(seed + 0.2) - 0.5) * jitterRange;
+
+        const cx = gx + pass.offsetX + jitterX + offsetX;
+        const cy = gy + pass.offsetY + jitterY + offsetY;
+
+        // Skip if outside bounds
+        if (cx < 0 || cx >= width || cy < 0 || cy >= height) continue;
+
+        // Sample darkness from preprocessed map
+        const srcX = Math.max(0, Math.min(srcWidth - 1, Math.round(cx * srcWidth / width)));
+        const srcY = Math.max(0, Math.min(srcHeight - 1, Math.round(cy * srcHeight / height)));
+        const si = srcY * srcWidth + srcX;
+        const darkness = map[si];
+
+        // Density-based dot decision with randomness
+        const random = seededRandom(seed);
+        if (darkness <= densityThreshold * (0.7 + random * 0.6)) continue;
+
+        // Calculate dot radius based on darkness
+        const radius = Math.sqrt(darkness) * dotRadius * pass.sizeMultiplier;
+        if (radius < MIN_ELEMENT_SIZE) continue;
+
+        svg += `    <circle cx="${round(cx)}" cy="${round(cy)}" r="${round(radius)}"/>\n`;
+      }
+    }
+  });
 
   return svg;
 }

@@ -46,6 +46,9 @@ export default function RightPanel({
   onInvertChange,
   onResetImageAdjustments,
   onClearCache,
+  // Phase 4: Preprocessing cache controls
+  onClearAllCaches,
+  cacheStats,
   // Layer properties
   selectedLayer,
   selectedLayerIndex,
@@ -87,6 +90,8 @@ export default function RightPanel({
             onInvertChange={onInvertChange}
             onReset={onResetImageAdjustments}
             onClearCache={onClearCache}
+            onClearAllCaches={onClearAllCaches}
+            cacheStats={cacheStats}
           />
         );
       case 'layer':

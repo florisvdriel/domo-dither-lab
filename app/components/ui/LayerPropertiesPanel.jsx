@@ -183,6 +183,21 @@ export default function LayerPropertiesPanel({
               />
             </div>
           )}
+
+          {/* Jitter (for organic stipple) */}
+          {layer.ditherType === 'organicStipple' && (
+            <div style={{ marginTop: '16px' }}>
+              <Slider
+                label={`JITTER ${Math.round((layer.jitter ?? 0.5) * 100)}%`}
+                value={layer.jitter ?? 0.5}
+                min={0}
+                max={1}
+                step={0.01}
+                onChange={(v) => onUpdate({ ...layer, jitter: v })}
+                debounceMs={50}
+              />
+            </div>
+          )}
         </AccordionSection>
 
         {/* 2. EXTRA ACTIONS */}
