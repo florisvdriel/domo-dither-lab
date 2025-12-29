@@ -18,12 +18,12 @@ export default function LayerPanel({ layer, index, totalLayers, onUpdate, onRemo
 
   // Use provided palette or fall back to DEFAULT_PALETTE
   const activePalette = palette || DEFAULT_PALETTE;
-  
+
   return (
-    <div 
-      style={{ 
-        marginBottom: '8px', 
-        backgroundColor: '#000', 
+    <div
+      style={{
+        marginBottom: '8px',
+        backgroundColor: '#000',
         border: hovering ? '1px solid #444' : '1px solid #2a2a2a',
         transition: 'border-color 0.12s ease',
         opacity: isVisible ? 1 : 0.5
@@ -34,19 +34,19 @@ export default function LayerPanel({ layer, index, totalLayers, onUpdate, onRemo
       <div style={{ display: 'flex' }}>
         <div style={{ width: '4px', flexShrink: 0, backgroundColor: activePalette[layer.colorKey]?.hex || '#fff' }} />
         <div style={{ flex: 1 }}>
-          <div 
-            style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              padding: '10px 12px', 
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              padding: '10px 12px',
               borderBottom: expanded ? '1px solid #222' : 'none',
               cursor: 'pointer'
             }}
             onClick={() => setExpanded(!expanded)}
           >
             {/* Visibility toggle (eye icon) */}
-            <IconButton 
-              onClick={(e) => { e.stopPropagation(); onUpdate({ ...layer, visible: !isVisible }); }} 
+            <IconButton
+              onClick={(e) => { e.stopPropagation(); onUpdate({ ...layer, visible: !isVisible }); }}
               title={isVisible ? "Hide layer" : "Show layer"}
             >
               {isVisible ? '👁' : '👁‍🗨'}
@@ -59,7 +59,7 @@ export default function LayerPanel({ layer, index, totalLayers, onUpdate, onRemo
               {canRemove && <IconButton onClick={(e) => { e.stopPropagation(); onRemove(); }} title="Remove">×</IconButton>}
             </div>
           </div>
-          
+
           {expanded && (
             <div style={{ padding: '12px' }}>
               <div style={{ marginBottom: '16px' }}>
@@ -78,33 +78,35 @@ export default function LayerPanel({ layer, index, totalLayers, onUpdate, onRemo
                         }}
                         onClick={() => onUpdate({ ...layer, colorKey: key })}
                       >
-                        <ColorPickerPopover
-                          key={`${key}-${color.hex}`}
-                          color={color.hex}
-                          onChange={(newHex) => onUpdatePaletteColor && onUpdatePaletteColor(key, newHex)}
-                          size="100%"
-                        />
+                        <div onClick={(e) => e.stopPropagation()} style={{ height: '100%' }}>
+                          <ColorPickerPopover
+                            key={key}
+                            color={color.hex}
+                            onChange={(newHex) => onUpdatePaletteColor && onUpdatePaletteColor(key, newHex)}
+                            size="100%"
+                          />
+                        </div>
                       </div>
                     ))}
                 </div>
               </div>
-              
+
               <AlgorithmSelect value={layer.ditherType} onChange={(v) => onUpdate({ ...layer, ditherType: v })} />
-              
+
               <Slider label={`DENSITY ${Math.round(layer.threshold * 100)}%`} value={layer.threshold} min={0} max={1} step={0.01} onChange={(v) => onUpdate({ ...layer, threshold: v })} debounceMs={50} />
-              
+
               {algoInfo?.hasScale && (
                 <Slider label={`SIZE ${layer.scale}px`} value={layer.scale} min={1} max={64} step={1} onChange={(v) => onUpdate({ ...layer, scale: v })} debounceMs={50} />
               )}
-              
+
               {algoInfo?.hasAngle && (
                 <Slider label={`ANGLE ${layer.angle}°`} value={layer.angle} min={0} max={180} step={5} onChange={(v) => onUpdate({ ...layer, angle: v })} debounceMs={50} />
               )}
 
               {/* X/Y Offset sliders - prominent for misregistered screenprint look */}
-              <div style={{ 
-                borderTop: '1px solid #222', 
-                paddingTop: '12px', 
+              <div style={{
+                borderTop: '1px solid #222',
+                paddingTop: '12px',
                 marginTop: '8px',
                 marginBottom: '12px'
               }}>
@@ -116,7 +118,7 @@ export default function LayerPanel({ layer, index, totalLayers, onUpdate, onRemo
                   <Slider label={`Y ${layer.offsetY}px`} value={layer.offsetY} min={-50} max={50} step={1} onChange={(v) => onUpdate({ ...layer, offsetY: v })} debounceMs={30} />
                 </div>
               </div>
-              
+
               <div style={{ marginBottom: '16px' }}>
                 <label style={{ display: 'block', color: '#666', fontSize: '10px', marginBottom: '8px', fontFamily: 'monospace' }}>BLEND</label>
                 <CustomSelect
@@ -125,7 +127,7 @@ export default function LayerPanel({ layer, index, totalLayers, onUpdate, onRemo
                   options={Object.entries(BLEND_MODES).map(([k, v]) => ({ value: k, label: v }))}
                 />
               </div>
-              
+
               <Slider label={`OPACITY ${Math.round(layer.opacity * 100)}%`} value={layer.opacity} min={0} max={1} step={0.01} onChange={(v) => onUpdate({ ...layer, opacity: v })} debounceMs={30} />
             </div>
           )}

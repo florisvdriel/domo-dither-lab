@@ -37,12 +37,14 @@ export default function BackgroundPropertiesPanel({
                 }}
                 onClick={() => onBackgroundColorChange(key)}
               >
-                <ColorPickerPopover
-                  key={`${key}-${palette[key]?.hex || '#000000'}`}
-                  color={palette[key]?.hex || '#000000'}
-                  onChange={(newHex) => onUpdatePaletteColor(key, newHex)}
-                  size="100%"
-                />
+                <div onClick={(e) => e.stopPropagation()} style={{ height: '100%' }}>
+                  <ColorPickerPopover
+                    key={key}
+                    color={palette[key]?.hex || '#000000'}
+                    onChange={(newHex) => onUpdatePaletteColor(key, newHex)}
+                    size="100%"
+                  />
+                </div>
               </div>
             ))}
           </div>

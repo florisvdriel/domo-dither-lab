@@ -143,12 +143,14 @@ export default function LayerPropertiesPanel({
                     }}
                     onClick={() => onUpdate({ ...layer, colorKey: key })}
                   >
-                    <ColorPickerPopover
-                      key={`${key}-${color.hex}`}
-                      color={color.hex}
-                      onChange={(newHex) => onUpdatePaletteColor && onUpdatePaletteColor(key, newHex)}
-                      size="100%"
-                    />
+                    <div onClick={(e) => e.stopPropagation()} style={{ height: '100%' }}>
+                      <ColorPickerPopover
+                        key={key}
+                        color={color.hex}
+                        onChange={(newHex) => onUpdatePaletteColor && onUpdatePaletteColor(key, newHex)}
+                        size="100%"
+                      />
+                    </div>
                   </div>
                 ))}
             </div>

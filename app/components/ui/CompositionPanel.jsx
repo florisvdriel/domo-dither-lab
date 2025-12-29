@@ -303,7 +303,7 @@ export default function CompositionPanel({
                   onMouseLeave={() => setHoveringSwatchKey(null)}
                 >
                   <ColorPickerPopover
-                    key={`${key}-${palette[key]?.hex || '#000000'}`}
+                    key={key}
                     color={palette[key]?.hex || '#000000'}
                     onChange={(newHex) => onUpdatePaletteColor(key, newHex)}
                     size="100%"

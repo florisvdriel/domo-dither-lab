@@ -27,22 +27,8 @@ export default function ColorPickerPopover({ color, onChange, size = 36 }) {
         side="bottom"
         align="start"
         sideOffset={8}
-        onInteractOutside={(e) => {
-          // Allow closing when clicking outside
-          // This is the default behavior, but we're being explicit
-        }}
       >
-        <div
-          className="space-y-2.5"
-          onMouseDown={(e) => {
-            // Stop mousedown from bubbling - this prevents the popover from closing
-            e.stopPropagation();
-          }}
-          onClick={(e) => {
-            // Stop click from bubbling
-            e.stopPropagation();
-          }}
-        >
+        <div className="space-y-2.5">
           <HexColorPicker
             color={color}
             onChange={onChange}
