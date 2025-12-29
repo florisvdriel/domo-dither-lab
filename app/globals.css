@@ -115,4 +115,27 @@
   .text-disabled {
     color: hsl(0 0% 26.7%); /* #444 */
   }
+
+  /* Color picker popover styles */
+  [data-radix-popper-content-wrapper] .react-colorful {
+    width: 180px !important;
+  }
+
+  [data-radix-popper-content-wrapper] .react-colorful__saturation {
+    border-radius: 0 !important;
+    height: 140px !important;
+  }
+
+  [data-radix-popper-content-wrapper] .react-colorful__hue {
+    border-radius: 0 !important;
+    height: 14px !important;
+    margin-top: 10px !important;
+  }
+
+  [data-radix-popper-content-wrapper] .react-colorful__hue-pointer,
+  [data-radix-popper-content-wrapper] .react-colorful__saturation-pointer {
+    width: 16px !important;
+    height: 16px !important;
+    border-radius: 0 !important;
+  }
 }

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Button from './Button';
 import IconButton from './IconButton';
 import LayerItem from './LayerItem';
-import { SwatchWithPicker } from './ColorPicker';
+import ColorPickerPopover from './ColorPickerPopover';
 
 // Simple non-collapsible section header
 function SectionHeader({ title }) {
@@ -302,7 +302,8 @@ export default function CompositionPanel({
                   onMouseEnter={() => setHoveringSwatchKey(key)}
                   onMouseLeave={() => setHoveringSwatchKey(null)}
                 >
-                  <SwatchWithPicker
+                  <ColorPickerPopover
+                    key={`${key}-${palette[key]?.hex || '#000000'}`}
                     color={palette[key]?.hex || '#000000'}
                     onChange={(newHex) => onUpdatePaletteColor(key, newHex)}
                     size="100%"

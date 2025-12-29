@@ -3,7 +3,7 @@
 import { useRef, useState, useEffect } from 'react';
 import { DITHER_ALGORITHMS } from '../../constants/ditherAlgorithms';
 import { BLEND_MODES } from '../../constants';
-import { LayerColorDropdown } from './ColorPicker';
+import ColorPickerPopover from './ColorPickerPopover';
 import AlgorithmSelect from './AlgorithmSelect';
 import Slider from './CustomSlider';
 import Button from './Button';
@@ -129,12 +129,29 @@ export default function LayerPropertiesPanel({
             }}>
               COLOR
             </label>
-            <LayerColorDropdown
-              value={layer.colorKey}
-              onChange={(k) => onUpdate({ ...layer, colorKey: k })}
-              palette={palette}
-              onUpdatePaletteColor={onUpdatePaletteColor}
-            />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
+              {Object.entries(palette)
+                .filter(([k]) => !['white', 'black'].includes(k))
+                .map(([key, color]) => (
+                  <div
+                    key={key}
+                    style={{
+                      height: '32px',
+                      position: 'relative',
+                      outline: layer.colorKey === key ? '2px solid #fff' : 'none',
+                      outlineOffset: '-2px'
+                    }}
+                    onClick={() => onUpdate({ ...layer, colorKey: key })}
+                  >
+                    <ColorPickerPopover
+                      key={`${key}-${color.hex}`}
+                      color={color.hex}
+                      onChange={(newHex) => onUpdatePaletteColor && onUpdatePaletteColor(key, newHex)}
+                      size="100%"
+                    />
+                  </div>
+                ))}
+            </div>
           </div>
 
           {/* Pattern */}

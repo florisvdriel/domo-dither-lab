@@ -175,7 +175,8 @@ export default function HalftoneLab() {
   }, [selection, layers]);
 
   // Track previous palette keys to detect changes
-  const prevPaletteKeysRef = useRef(colorKeys);
+  // Initialize with empty array to trigger remapping on first render
+  const prevPaletteKeysRef = useRef([]);
 
   // Automatically remap layer colors when palette keys change
   // Use useLayoutEffect to run synchronously before paint, preventing flicker
@@ -197,7 +198,7 @@ export default function HalftoneLab() {
       }));
       prevPaletteKeysRef.current = currentKeys;
     }
-  }, [palette]);
+  }, [palette, layers]);
 
   // Debounce all processing-related state changes
   // Longer debounce for expensive operations

@@ -1,6 +1,7 @@
 'use client';
 
-import { ColorSwatch, LayerColorDropdown } from './ColorPicker';
+import { ColorSwatch } from './ColorPicker';
+import ColorPickerPopover from './ColorPickerPopover';
 import Section from './CustomSection';
 
 export default function BackgroundPropertiesPanel({
@@ -24,13 +25,27 @@ export default function BackgroundPropertiesPanel({
         </p>
 
         <div style={{ marginBottom: '16px' }}>
-          <LayerColorDropdown
-            value={backgroundColorKey || backgroundColor}
-            onChange={onBackgroundColorChange}
-            palette={palette}
-            // Pass onUpdatePaletteColor to allow editing palette colors from background panel
-            onUpdatePaletteColor={onUpdatePaletteColor}
-          />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
+            {colorKeys.map((key) => (
+              <div
+                key={key}
+                style={{
+                  height: '32px',
+                  position: 'relative',
+                  outline: (backgroundColorKey === key || backgroundColor === palette[key]?.hex) ? '2px solid #fff' : 'none',
+                  outlineOffset: '-2px'
+                }}
+                onClick={() => onBackgroundColorChange(key)}
+              >
+                <ColorPickerPopover
+                  key={`${key}-${palette[key]?.hex || '#000000'}`}
+                  color={palette[key]?.hex || '#000000'}
+                  onChange={(newHex) => onUpdatePaletteColor(key, newHex)}
+                  size="100%"
+                />
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Black and white options */}

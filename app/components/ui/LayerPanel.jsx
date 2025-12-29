@@ -5,12 +5,12 @@ import { DITHER_ALGORITHMS } from '../../constants/ditherAlgorithms';
 import { BLEND_MODES } from '../../constants';
 import { DEFAULT_PALETTE } from '../../constants/palette';
 import IconButton from './IconButton';
-import { CompactColorPicker } from './ColorPicker';
+import ColorPickerPopover from './ColorPickerPopover';
 import AlgorithmSelect from './AlgorithmSelect';
 import Slider from './CustomSlider';
 import CustomSelect from './CustomSelect';
 
-export default function LayerPanel({ layer, index, totalLayers, onUpdate, onRemove, onDuplicate, onMoveUp, onMoveDown, canRemove, palette = null }) {
+export default function LayerPanel({ layer, index, totalLayers, onUpdate, onRemove, onDuplicate, onMoveUp, onMoveDown, canRemove, palette = null, onUpdatePaletteColor }) {
   const [expanded, setExpanded] = useState(true);
   const [hovering, setHovering] = useState(false);
   const algoInfo = DITHER_ALGORITHMS[layer.ditherType];
@@ -64,7 +64,29 @@ export default function LayerPanel({ layer, index, totalLayers, onUpdate, onRemo
             <div style={{ padding: '12px' }}>
               <div style={{ marginBottom: '16px' }}>
                 <label style={{ display: 'block', color: '#666', fontSize: '10px', marginBottom: '8px', fontFamily: 'monospace', letterSpacing: '0.05em' }}>COLOR</label>
-                <CompactColorPicker value={layer.colorKey} onChange={(k) => onUpdate({ ...layer, colorKey: k })} palette={activePalette} />
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
+                  {Object.entries(activePalette)
+                    .filter(([k]) => !['white', 'black'].includes(k))
+                    .map(([key, color]) => (
+                      <div
+                        key={key}
+                        style={{
+                          height: '32px',
+                          position: 'relative',
+                          outline: layer.colorKey === key ? '2px solid #fff' : 'none',
+                          outlineOffset: '-2px'
+                        }}
+                        onClick={() => onUpdate({ ...layer, colorKey: key })}
+                      >
+                        <ColorPickerPopover
+                          key={`${key}-${color.hex}`}
+                          color={color.hex}
+                          onChange={(newHex) => onUpdatePaletteColor && onUpdatePaletteColor(key, newHex)}
+                          size="100%"
+                        />
+                      </div>
+                    ))}
+                </div>
               </div>
               
               <AlgorithmSelect value={layer.ditherType} onChange={(v) => onUpdate({ ...layer, ditherType: v })} />
