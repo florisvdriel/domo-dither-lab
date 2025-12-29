@@ -7,7 +7,8 @@ import { DEFAULT_PALETTE } from '../../constants/palette';
 import IconButton from './IconButton';
 import { CompactColorPicker } from './ColorPicker';
 import AlgorithmSelect from './AlgorithmSelect';
-import Slider from './Slider';
+import Slider from './CustomSlider';
+import CustomSelect from './CustomSelect';
 
 export default function LayerPanel({ layer, index, totalLayers, onUpdate, onRemove, onDuplicate, onMoveUp, onMoveDown, canRemove, palette = null }) {
   const [expanded, setExpanded] = useState(true);
@@ -94,14 +95,14 @@ export default function LayerPanel({ layer, index, totalLayers, onUpdate, onRemo
                 </div>
               </div>
               
-              <label style={{ display: 'block', color: '#666', fontSize: '10px', marginBottom: '8px', fontFamily: 'monospace' }}>BLEND</label>
-              <select 
-                value={layer.blendMode} 
-                onChange={(e) => onUpdate({ ...layer, blendMode: e.target.value })} 
-                style={{ width: '100%', padding: '8px', backgroundColor: '#000', border: '1px solid #333', color: '#fff', fontSize: '10px', fontFamily: 'monospace', marginBottom: '16px', cursor: 'pointer' }}
-              >
-                {Object.entries(BLEND_MODES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-              </select>
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', color: '#666', fontSize: '10px', marginBottom: '8px', fontFamily: 'monospace' }}>BLEND</label>
+                <CustomSelect
+                  value={layer.blendMode}
+                  onChange={(value) => onUpdate({ ...layer, blendMode: value })}
+                  options={Object.entries(BLEND_MODES).map(([k, v]) => ({ value: k, label: v }))}
+                />
+              </div>
               
               <Slider label={`OPACITY ${Math.round(layer.opacity * 100)}%`} value={layer.opacity} min={0} max={1} step={0.01} onChange={(v) => onUpdate({ ...layer, opacity: v })} debounceMs={30} />
             </div>

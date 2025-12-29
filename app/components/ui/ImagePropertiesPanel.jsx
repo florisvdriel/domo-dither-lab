@@ -1,8 +1,8 @@
 'use client';
 
 import Button from './Button';
-import Slider from './Slider';
-import Section from './Section';
+import Slider from './CustomSlider';
+import Section from './CustomSection';
 
 export default function ImagePropertiesPanel({
   imageScale,

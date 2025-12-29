@@ -1,69 +1,108 @@
 'use client';
 
-import { useState } from 'react';
-import { COLORS, FONTS, TRANSITIONS } from '../../constants/design';
-import Button from './Button';
+import { useState, useEffect, useRef } from 'react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 
 export default function SavePresetModal({ onSave, onCancel }) {
   const [name, setName] = useState('');
-  
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    // Auto-focus input when modal opens
+    const timer = setTimeout(() => {
+      inputRef.current?.focus();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const handleSave = () => {
+    if (name.trim()) {
+      onSave(name.trim());
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      handleSave();
+    }
+  };
+
   return (
-    <div style={{
-      position: 'fixed',
-      inset: 0,
-      backgroundColor: 'rgba(0,0,0,0.85)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 1000,
-      backdropFilter: 'blur(4px)'
-    }}>
-      <div style={{
-        backgroundColor: COLORS.bg.tertiary,
-        border: `1px solid ${COLORS.border.default}`,
-        borderRadius: '8px',
-        padding: '28px',
-        width: '320px',
-        boxShadow: '0 16px 48px rgba(0,0,0,0.5)'
-      }}>
-        <h3 style={{ 
-          margin: '0 0 20px', 
-          fontSize: '13px', 
-          fontFamily: FONTS.ui, 
-          fontWeight: 600,
-          letterSpacing: '0.05em',
-          color: COLORS.text.primary
-        }}>
-          Save Preset
-        </h3>
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Preset name..."
-          style={{
-            width: '100%',
-            padding: '12px 14px',
-            backgroundColor: COLORS.bg.secondary,
-            border: `1px solid ${COLORS.border.default}`,
-            borderRadius: '4px',
-            color: COLORS.text.primary,
-            fontSize: '12px',
-            fontFamily: FONTS.ui,
-            marginBottom: '20px',
-            boxSizing: 'border-box',
-            outline: 'none',
-            transition: TRANSITIONS.fast
-          }}
-          onFocus={(e) => e.target.style.borderColor = COLORS.ink.coral}
-          onBlur={(e) => e.target.style.borderColor = COLORS.border.default}
-          autoFocus
-        />
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <Button onClick={onCancel} style={{ flex: 1 }}>Cancel</Button>
-          <Button primary onClick={() => name.trim() && onSave(name.trim())} style={{ flex: 1 }}>Save</Button>
+    <Dialog open={true} onOpenChange={(open) => !open && onCancel()}>
+      <DialogContent
+        className="gap-0 p-0 border-[#333] [&>button]:hidden rounded-none"
+        style={{
+          width: '300px',
+          maxWidth: '300px',
+          backgroundColor: '#111',
+          borderWidth: '1px',
+          borderStyle: 'solid',
+          borderColor: '#333',
+          borderRadius: 0,
+        }}
+      >
+        <DialogHeader
+          className="p-6 pb-4"
+          style={{ padding: '24px 24px 16px' }}
+        >
+          <DialogTitle
+            className="text-white font-mono font-semibold"
+            style={{
+              fontSize: '11px',
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+            }}
+          >
+            Save Preset
+          </DialogTitle>
+        </DialogHeader>
+
+        <div
+          className="px-6 pb-4"
+          style={{ padding: '0 24px 16px' }}
+        >
+          <Input
+            ref={inputRef}
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Preset name..."
+            className="w-full bg-black border-[#333] text-white font-mono text-xs focus-visible:ring-[#444] focus-visible:border-[#444]"
+            style={{
+              fontSize: '12px',
+            }}
+          />
         </div>
-      </div>
-    </div>
+
+        <DialogFooter
+          className="flex-row gap-2 px-6 pb-6"
+          style={{ padding: '0 24px 24px' }}
+        >
+          <Button
+            variant="outline"
+            onClick={onCancel}
+            className="flex-1 font-mono text-xs border-[#333] bg-transparent text-white hover:bg-[#222] hover:border-[#444]"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={!name.trim()}
+            className="flex-1 font-mono text-xs bg-white text-black hover:bg-white/90 disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

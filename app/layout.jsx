@@ -1,3 +1,4 @@
+import './globals.css';
 import { COLORS, FONTS } from './constants/design';
 
 export const metadata = {

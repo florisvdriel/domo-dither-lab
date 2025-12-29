@@ -1,7 +1,7 @@
 'use client';
 
 import { ColorSwatch, LayerColorDropdown } from './ColorPicker';
-import Section from './Section';
+import Section from './CustomSection';
 
 export default function BackgroundPropertiesPanel({
   backgroundColor,

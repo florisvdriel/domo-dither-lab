@@ -4,8 +4,8 @@ import { useState } from 'react';
 import { PRESETS } from '../../constants/presets';
 import { EXPORT_RESOLUTIONS } from '../../constants';
 import Button from './Button';
-import Slider from './Slider';
-import Tooltip from './Tooltip';
+import Slider from './CustomSlider';
+import Tooltip from './CustomTooltip';
 import IconButton from './IconButton';
 import { ColorSwatch } from './ColorPicker';
 

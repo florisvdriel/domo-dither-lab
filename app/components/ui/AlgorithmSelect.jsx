@@ -1,13 +1,40 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo } from 'react';
 import { DITHER_ALGORITHMS } from '../../constants/ditherAlgorithms';
-import Tooltip from './Tooltip';
+import Tooltip from './CustomTooltip';
+import CustomSelect from './CustomSelect';
 
 export default function AlgorithmSelect({ value, onChange, includeNone = false }) {
-  const [hovering, setHovering] = useState(false);
   const algoInfo = DITHER_ALGORITHMS[value];
-  
+
+  // Transform DITHER_ALGORITHMS into grouped options format
+  const options = useMemo(() => {
+    const categoryToGroup = {
+      'halftone': 'HALFTONE',
+      'ordered': 'ORDERED',
+      'diffusion': 'DIFFUSION',
+      'other': 'ORGANIC',
+    };
+
+    const groupedOptions = Object.entries(DITHER_ALGORITHMS).map(([key, algo]) => ({
+      value: key,
+      label: algo.name,
+      group: categoryToGroup[algo.category] || 'OTHER',
+    }));
+
+    // Add "NONE" option at the beginning if includeNone is true
+    if (includeNone) {
+      groupedOptions.unshift({
+        value: 'none',
+        label: 'NONE',
+        group: undefined, // No group for NONE option
+      });
+    }
+
+    return groupedOptions;
+  }, [includeNone]);
+
   return (
     <div style={{ marginBottom: '16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
@@ -18,39 +45,12 @@ export default function AlgorithmSelect({ value, onChange, includeNone = false }
           </Tooltip>
         )}
       </div>
-      <select 
-        value={value} 
-        onChange={(e) => onChange(e.target.value)} 
-        onMouseEnter={() => setHovering(true)}
-        onMouseLeave={() => setHovering(false)}
-        style={{ 
-          width: '100%', 
-          padding: '8px', 
-          backgroundColor: '#000', 
-          border: hovering ? '1px solid #444' : '1px solid #333', 
-          color: '#fff', 
-          fontSize: '10px', 
-          fontFamily: 'monospace',
-          cursor: 'pointer',
-          transition: 'border-color 0.12s ease'
-        }}
-      >
-        {includeNone && <option value="none">NONE</option>}
-        <optgroup label="HALFTONE">
-          {Object.entries(DITHER_ALGORITHMS).filter(([,v]) => v.category === 'halftone').map(([k, v]) => <option key={k} value={k}>{v.name}</option>)}
-        </optgroup>
-        <optgroup label="ORDERED">
-          {Object.entries(DITHER_ALGORITHMS).filter(([,v]) => v.category === 'ordered').map(([k, v]) => <option key={k} value={k}>{v.name}</option>)}
-        </optgroup>
-        <optgroup label="DIFFUSION">
-          {Object.entries(DITHER_ALGORITHMS).filter(([,v]) => v.category === 'diffusion').map(([k, v]) => <option key={k} value={k}>{v.name}</option>)}
-        </optgroup>
-        <optgroup label="ORGANIC">
-          {Object.entries(DITHER_ALGORITHMS).filter(([,v]) => v.category === 'other').map(([k, v]) => <option key={k} value={k}>{v.name}</option>)}
-        </optgroup>
-      </select>
+      <CustomSelect
+        value={value}
+        onChange={onChange}
+        options={options}
+        placeholder="Select pattern..."
+      />
     </div>
   );
 }
-
-

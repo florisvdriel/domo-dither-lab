@@ -5,9 +5,10 @@ import { DITHER_ALGORITHMS } from '../../constants/ditherAlgorithms';
 import { BLEND_MODES } from '../../constants';
 import { LayerColorDropdown } from './ColorPicker';
 import AlgorithmSelect from './AlgorithmSelect';
-import Slider from './Slider';
+import Slider from './CustomSlider';
 import Button from './Button';
 import { Accordion, AccordionSection } from './Accordion';
+import CustomSelect from './CustomSelect';
 
 export default function LayerPropertiesPanel({
   layer,
@@ -61,29 +62,20 @@ export default function LayerPropertiesPanel({
       }}>
         CHANNEL
       </label>
-      <select
+      <CustomSelect
         value={layer.channel || 'gray'}
-        onChange={(e) => onUpdate({ ...layer, channel: e.target.value })}
-        style={{
-          width: '100%',
-          padding: '6px',
-          backgroundColor: '#000',
-          border: '1px solid #333',
-          color: '#fff',
-          fontSize: '10px',
-          fontFamily: 'monospace',
-          cursor: 'pointer'
-        }}
-      >
-        <option value="gray">GRAYSCALE</option>
-        <option value="red">RED</option>
-        <option value="green">GREEN</option>
-        <option value="blue">BLUE</option>
-        <option value="cyan">CYAN</option>
-        <option value="magenta">MAGENTA</option>
-        <option value="yellow">YELLOW</option>
-        <option value="black">BLACK (K)</option>
-      </select>
+        onChange={(value) => onUpdate({ ...layer, channel: value })}
+        options={[
+          { value: 'gray', label: 'GRAYSCALE' },
+          { value: 'red', label: 'RED' },
+          { value: 'green', label: 'GREEN' },
+          { value: 'blue', label: 'BLUE' },
+          { value: 'cyan', label: 'CYAN' },
+          { value: 'magenta', label: 'MAGENTA' },
+          { value: 'yellow', label: 'YELLOW' },
+          { value: 'black', label: 'BLACK (K)' },
+        ]}
+      />
     </div>
   );
 
@@ -266,35 +258,26 @@ export default function LayerPropertiesPanel({
             onToggle={() => handleSectionChange('grid-settings')}
           >
             {/* Grid Type */}
-            <div style={{ marginBottom: '12px' }}>
+            <div style={{ marginBottom: '16px' }}>
               <label style={{
                 display: 'block',
                 color: '#666',
-                fontSize: '9px',
-                marginBottom: '6px',
+                fontSize: '10px',
+                marginBottom: '8px',
                 fontFamily: 'monospace',
                 letterSpacing: '0.05em'
               }}>
                 GRID KIND
               </label>
-              <select
+              <CustomSelect
                 value={layer.gridType || 'square'}
-                onChange={(e) => onUpdate({ ...layer, gridType: e.target.value })}
-                style={{
-                  width: '100%',
-                  padding: '6px',
-                  backgroundColor: '#000',
-                  border: '1px solid #333',
-                  color: '#fff',
-                  fontSize: '10px',
-                  fontFamily: 'monospace',
-                  cursor: 'pointer'
-                }}
-              >
-                <option value="square">SQUARE</option>
-                <option value="hex">HEXAGONAL</option>
-                <option value="radial">RADIAL</option>
-              </select>
+                onChange={(value) => onUpdate({ ...layer, gridType: value })}
+                options={[
+                  { value: 'square', label: 'SQUARE' },
+                  { value: 'hex', label: 'HEXAGONAL' },
+                  { value: 'radial', label: 'RADIAL' }
+                ]}
+              />
             </div>
 
             {/* Size */}
@@ -562,34 +545,22 @@ export default function LayerPropertiesPanel({
           isOpen={openSectionId === 'blending'}
           onToggle={() => handleSectionChange('blending')}
         >
-          <label style={{
-            display: 'block',
-            color: '#666',
-            fontSize: '10px',
-            marginBottom: '8px',
-            fontFamily: 'monospace'
-          }}>
-            BLEND MODE
-          </label>
-          <select
-            value={layer.blendMode}
-            onChange={(e) => onUpdate({ ...layer, blendMode: e.target.value })}
-            style={{
-              width: '100%',
-              padding: '8px',
-              backgroundColor: '#000',
-              border: '1px solid #333',
-              color: '#fff',
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{
+              display: 'block',
+              color: '#666',
               fontSize: '10px',
-              fontFamily: 'monospace',
-              marginBottom: '16px',
-              cursor: 'pointer'
-            }}
-          >
-            {Object.entries(BLEND_MODES).map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
-            ))}
-          </select>
+              marginBottom: '8px',
+              fontFamily: 'monospace'
+            }}>
+              BLEND MODE
+            </label>
+            <CustomSelect
+              value={layer.blendMode}
+              onChange={(value) => onUpdate({ ...layer, blendMode: value })}
+              options={Object.entries(BLEND_MODES).map(([k, v]) => ({ value: k, label: v }))}
+            />
+          </div>
 
           <Slider
             label={`OPACITY ${Math.round(layer.opacity * 100)}%`}
