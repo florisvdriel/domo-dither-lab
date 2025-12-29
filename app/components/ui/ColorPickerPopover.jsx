@@ -1,25 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { HexColorPicker, HexColorInput } from 'react-colorful';
 
 export default function ColorPickerPopover({ color, onChange, size = 36 }) {
-  const [localColor, setLocalColor] = useState(color || '#000000');
-  const [isHovering, setIsHovering] = useState(false);
-
-  // Sync local color when prop changes (e.g., palette updates)
-  useEffect(() => {
-    if (color) {
-      setLocalColor(color);
-    }
-  }, [color]);
-
-  const handleColorChange = (newColor) => {
-    setLocalColor(newColor);
-    onChange(newColor);
-  };
-
   // Handle size as number (px) or string (e.g., "100%")
   const sizeStyle = typeof size === 'number' ? `${size}px` : size;
 
@@ -27,85 +11,52 @@ export default function ColorPickerPopover({ color, onChange, size = 36 }) {
     <Popover>
       <PopoverTrigger asChild>
         <button
-          onMouseEnter={() => setIsHovering(true)}
-          onMouseLeave={() => setIsHovering(false)}
+          className="border border-[#222] hover:border-[#444] transition-colors duration-150 cursor-pointer"
           style={{
             width: sizeStyle,
             height: sizeStyle,
-            backgroundColor: localColor,
-            border: isHovering ? '1px solid #444' : '1px solid #222',
+            backgroundColor: color,
             borderRadius: 0,
-            cursor: 'pointer',
-            padding: 0,
-            transition: 'border-color 0.15s ease',
-            outline: 'none'
+            padding: 0
           }}
-          aria-label="Pick color"
         />
       </PopoverTrigger>
+
       <PopoverContent
+        className="bg-[#0a0a0a] border border-[#222] rounded-none p-3 shadow-[0_8px_24px_rgba(0,0,0,0.5)] z-50 w-auto"
         side="bottom"
         align="start"
         sideOffset={8}
-        className="border-0 rounded-none p-0"
-        style={{
-          backgroundColor: '#0a0a0a',
-          border: '1px solid #222',
-          borderRadius: 0,
-          padding: '12px',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-          width: 'auto'
+        onInteractOutside={(e) => {
+          // Allow closing when clicking outside
+          // This is the default behavior, but we're being explicit
         }}
       >
-        {/* Color Picker */}
-        <div style={{ marginBottom: '12px' }}>
-          <HexColorPicker
-            color={localColor}
-            onChange={handleColorChange}
-            style={{
-              width: '180px',
-              borderRadius: 0
-            }}
-          />
-        </div>
-
-        {/* Hex Input */}
         <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            backgroundColor: '#000',
-            border: '1px solid #333',
-            borderRadius: 0,
-            padding: '6px 10px'
+          className="space-y-2.5"
+          onMouseDown={(e) => {
+            // Stop mousedown from bubbling - this prevents the popover from closing
+            e.stopPropagation();
+          }}
+          onClick={(e) => {
+            // Stop click from bubbling
+            e.stopPropagation();
           }}
         >
-          <span
-            style={{
-              color: '#666',
-              fontSize: '10px',
-              fontFamily: 'monospace',
-              marginRight: '6px'
-            }}
-          >
-            #
-          </span>
-          <HexColorInput
-            color={localColor}
-            onChange={handleColorChange}
-            prefixed={false}
-            style={{
-              flex: 1,
-              backgroundColor: 'transparent',
-              border: 'none',
-              color: '#fff',
-              fontSize: '11px',
-              fontFamily: 'monospace',
-              outline: 'none',
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em'
-            }}
+          <HexColorPicker
+            color={color}
+            onChange={onChange}
+            style={{ width: '180px', height: '140px' }}
           />
+
+          <div className="flex items-center bg-black border border-[#333] p-1.5 px-2.5">
+            <span className="text-[#666] text-[10px] font-mono mr-1.5">#</span>
+            <HexColorInput
+              color={color}
+              onChange={onChange}
+              className="flex-1 bg-transparent border-none text-white text-[11px] font-mono uppercase outline-none w-full"
+            />
+          </div>
         </div>
       </PopoverContent>
     </Popover>
