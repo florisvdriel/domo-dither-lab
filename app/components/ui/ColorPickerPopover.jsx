@@ -32,7 +32,7 @@ export default function ColorPickerPopover({ color, onChange, size = 36 }) {
           <HexColorPicker
             color={color}
             onChange={onChange}
-            style={{ width: '180px', height: '140px' }}
+            style={{ width: '180px', height: '180px' }}
           />
 
           <div className="flex items-center bg-black border border-[#333] p-1.5 px-2.5">

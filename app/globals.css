@@ -8,34 +8,52 @@
     /* Matching existing design constants */
 
     /* Backgrounds: #0a0a0a (sidebar), #000 (cards), #111 (canvas) */
-    --background: 0 0% 3.9%; /* #0a0a0a - sidebar/main background */
-    --foreground: 0 0% 100%; /* #fff - primary text */
+    --background: 0 0% 3.9%;
+    /* #0a0a0a - sidebar/main background */
+    --foreground: 0 0% 100%;
+    /* #fff - primary text */
 
-    --card: 0 0% 0%; /* #000 - cards */
-    --card-foreground: 0 0% 100%; /* #fff */
+    --card: 0 0% 0%;
+    /* #000 - cards */
+    --card-foreground: 0 0% 100%;
+    /* #fff */
 
-    --popover: 0 0% 0%; /* #000 */
-    --popover-foreground: 0 0% 100%; /* #fff */
+    --popover: 0 0% 0%;
+    /* #000 */
+    --popover-foreground: 0 0% 100%;
+    /* #fff */
 
-    --primary: 0 0% 100%; /* #fff - accent/primary */
-    --primary-foreground: 0 0% 0%; /* #000 - text on white */
+    --primary: 0 0% 100%;
+    /* #fff - accent/primary */
+    --primary-foreground: 0 0% 0%;
+    /* #000 - text on white */
 
-    --secondary: 0 0% 6.7%; /* #111 - canvas area */
-    --secondary-foreground: 0 0% 100%; /* #fff */
+    --secondary: 0 0% 6.7%;
+    /* #111 - canvas area */
+    --secondary-foreground: 0 0% 100%;
+    /* #fff */
 
-    --muted: 0 0% 20%; /* #333 */
-    --muted-foreground: 0 0% 40%; /* #666 - muted text */
+    --muted: 0 0% 20%;
+    /* #333 */
+    --muted-foreground: 0 0% 40%;
+    /* #666 - muted text */
 
-    --accent: 0 0% 100%; /* #fff - accent color */
-    --accent-foreground: 0 0% 0%; /* #000 */
+    --accent: 0 0% 100%;
+    /* #fff - accent color */
+    --accent-foreground: 0 0% 0%;
+    /* #000 */
 
-    --destructive: 0 84.2% 60.2%; /* red for errors */
+    --destructive: 0 84.2% 60.2%;
+    /* red for errors */
     --destructive-foreground: 0 0% 100%;
 
     /* Borders: #222 (subtle), #333 (default), #444 (hover) */
-    --border: 0 0% 13.3%; /* #222 - subtle borders */
-    --input: 0 0% 20%; /* #333 - default input borders */
-    --ring: 0 0% 26.7%; /* #444 - focus ring/hover */
+    --border: 0 0% 13.3%;
+    /* #222 - subtle borders */
+    --input: 0 0% 20%;
+    /* #333 - default input borders */
+    --ring: 0 0% 26.7%;
+    /* #444 - focus ring/hover */
 
     /* Sharp corners - no rounding */
     --radius: 0rem;
@@ -101,41 +119,53 @@
 
   /* Text color variations */
   .text-primary {
-    color: hsl(0 0% 100%); /* #fff */
+    color: hsl(0 0% 100%);
+    /* #fff */
   }
 
   .text-secondary {
-    color: hsl(0 0% 53.3%); /* #888 */
+    color: hsl(0 0% 53.3%);
+    /* #888 */
   }
 
   .text-muted {
-    color: hsl(0 0% 40%); /* #666 */
+    color: hsl(0 0% 40%);
+    /* #666 */
   }
 
   .text-disabled {
-    color: hsl(0 0% 26.7%); /* #444 */
+    color: hsl(0 0% 26.7%);
+    /* #444 */
   }
 
   /* Color picker popover styles */
-  [data-radix-popper-content-wrapper] .react-colorful {
+  .react-colorful {
     width: 180px !important;
+    height: 180px !important;
   }
 
-  [data-radix-popper-content-wrapper] .react-colorful__saturation {
+  .react-colorful__saturation {
     border-radius: 0 !important;
-    height: 140px !important;
+    height: 160px !important;
+    /* 180px total - 10px hue - 10px margin */
+    margin-bottom: 10px !important;
+    border-bottom: none !important;
   }
 
-  [data-radix-popper-content-wrapper] .react-colorful__hue {
+  .react-colorful__hue {
     border-radius: 0 !important;
-    height: 14px !important;
-    margin-top: 10px !important;
+    height: 10px !important;
+    margin-top: 0 !important;
+    /* controlled by saturation margin */
   }
 
-  [data-radix-popper-content-wrapper] .react-colorful__hue-pointer,
-  [data-radix-popper-content-wrapper] .react-colorful__saturation-pointer {
-    width: 16px !important;
-    height: 16px !important;
+  .react-colorful__hue-pointer,
+  .react-colorful__saturation-pointer {
+    width: 12px !important;
+    /* Slightly smaller for precision */
+    height: 12px !important;
     border-radius: 0 !important;
+    border: 2px solid #fff !important;
+    /* Ensure visibility */
   }
 }
