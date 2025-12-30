@@ -5,7 +5,6 @@ import { DITHER_ALGORITHMS } from '../../constants/ditherAlgorithms';
 import { BLEND_MODES } from '../../constants';
 import { DEFAULT_PALETTE } from '../../constants/palette';
 import IconButton from './IconButton';
-import ColorPickerPopover from './ColorPickerPopover';
 import AlgorithmSelect from './AlgorithmSelect';
 import Slider from './CustomSlider';
 import CustomSelect from './CustomSelect';
@@ -18,6 +17,9 @@ export default function LayerPanel({ layer, index, totalLayers, onUpdate, onRemo
 
   // Use provided palette or fall back to DEFAULT_PALETTE
   const activePalette = palette || DEFAULT_PALETTE;
+
+  // Get current layer color
+  const layerColor = activePalette[layer.colorKey] || { name: 'Unknown', hex: '#000000' };
 
   return (
     <div
@@ -63,32 +65,57 @@ export default function LayerPanel({ layer, index, totalLayers, onUpdate, onRemo
           {expanded && (
             <div style={{ padding: '12px' }}>
               <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', color: '#666', fontSize: '10px', marginBottom: '8px', fontFamily: 'monospace', letterSpacing: '0.05em' }}>COLOR</label>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
-                  {Object.entries(activePalette)
-                    .filter(([k]) => !['white', 'black'].includes(k))
-                    .map(([key, color]) => (
-                      <div
-                        key={key}
-                        style={{
-                          height: '32px',
-                          position: 'relative',
-                          outline: layer.colorKey === key ? '2px solid #fff' : 'none',
-                          outlineOffset: '-2px'
-                        }}
-                        onClick={() => onUpdate({ ...layer, colorKey: key })}
-                      >
-                        <div onClick={(e) => e.stopPropagation()} style={{ height: '100%' }}>
-                          <ColorPickerPopover
-                            key={key}
-                            color={color.hex}
-                            onChange={(newHex) => onUpdatePaletteColor && onUpdatePaletteColor(key, newHex)}
-                            size="100%"
-                          />
-                        </div>
-                      </div>
-                    ))}
+                <label style={{ display: 'block', color: '#666', fontSize: '10px', marginBottom: '8px', fontFamily: 'monospace', letterSpacing: '0.05em' }}>
+                  COLOR
+                </label>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 10px',
+                  backgroundColor: '#000',
+                  border: '1px solid #333'
+                }}>
+                  {/* Color swatch */}
+                  <div style={{
+                    width: '20px',
+                    height: '20px',
+                    backgroundColor: layerColor.hex,
+                    border: '1px solid #222',
+                    flexShrink: 0
+                  }} />
+
+                  {/* Color name */}
+                  <span style={{
+                    fontSize: '10px',
+                    fontFamily: 'monospace',
+                    color: '#fff',
+                    letterSpacing: '0.05em',
+                    textTransform: 'uppercase'
+                  }}>
+                    {layerColor.name}
+                  </span>
+
+                  {/* Helper icon/text */}
+                  <span style={{
+                    marginLeft: 'auto',
+                    fontSize: '9px',
+                    color: '#444',
+                    fontFamily: 'monospace'
+                  }}>
+                    ←
+                  </span>
                 </div>
+
+                {/* Helper text */}
+                <p style={{
+                  fontSize: '9px',
+                  color: '#444',
+                  margin: '6px 0 0 0',
+                  fontStyle: 'italic'
+                }}>
+                  Edit palette colors in left panel
+                </p>
               </div>
 
               <AlgorithmSelect value={layer.ditherType} onChange={(v) => onUpdate({ ...layer, ditherType: v })} />

@@ -1,7 +1,6 @@
 'use client';
 
 import { ColorSwatch } from './ColorPicker';
-import ColorPickerPopover from './ColorPickerPopover';
 import Section from './CustomSection';
 
 export default function BackgroundPropertiesPanel({
@@ -9,8 +8,7 @@ export default function BackgroundPropertiesPanel({
   onBackgroundColorChange,
   backgroundColorKey,
   palette,
-  colorKeys,
-  onUpdatePaletteColor
+  colorKeys
 }) {
   return (
     <div>
@@ -26,27 +24,20 @@ export default function BackgroundPropertiesPanel({
 
         <div style={{ marginBottom: '16px' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
-            {colorKeys.map((key) => (
-              <div
-                key={key}
-                style={{
-                  height: '32px',
-                  position: 'relative',
-                  outline: (backgroundColorKey === key || backgroundColor === palette[key]?.hex) ? '2px solid #fff' : 'none',
-                  outlineOffset: '-2px'
-                }}
-                onClick={() => onBackgroundColorChange(key)}
-              >
-                <div onClick={(e) => e.stopPropagation()} style={{ height: '100%' }}>
-                  <ColorPickerPopover
-                    key={key}
-                    color={palette[key]?.hex || '#000000'}
-                    onChange={(newHex) => onUpdatePaletteColor(key, newHex)}
-                    size="100%"
-                  />
-                </div>
-              </div>
-            ))}
+            {colorKeys.map((key) => {
+              const color = palette[key];
+              if (!color) return null;
+              return (
+                <ColorSwatch
+                  key={key}
+                  color={color.hex}
+                  selected={backgroundColorKey === key || backgroundColor === color.hex}
+                  onClick={() => onBackgroundColorChange(key)}
+                  size="100%"
+                  style={{ height: '32px' }}
+                />
+              );
+            })}
           </div>
         </div>
 

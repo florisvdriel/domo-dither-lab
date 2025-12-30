@@ -57,7 +57,6 @@ export default function RightPanel({
   onRemoveLayer,
   onDuplicateLayer,
   activePalette,
-  onUpdatePaletteColor,
   backgroundColorKey
 }) {
   const getPanelTitle = () => {
@@ -106,7 +105,6 @@ export default function RightPanel({
             canRemove={totalLayers > 1}
             palette={activePalette}
             colorKeys={colorKeys}
-            onUpdatePaletteColor={onUpdatePaletteColor}
           />
         ) : null;
       case 'background':
@@ -117,7 +115,6 @@ export default function RightPanel({
             backgroundColorKey={backgroundColorKey}
             palette={palette}
             colorKeys={colorKeys}
-            onUpdatePaletteColor={onUpdatePaletteColor}
           />
         );
       default:

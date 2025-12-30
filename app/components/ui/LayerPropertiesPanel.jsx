@@ -3,7 +3,7 @@
 import { useRef, useState, useEffect } from 'react';
 import { DITHER_ALGORITHMS } from '../../constants/ditherAlgorithms';
 import { BLEND_MODES } from '../../constants';
-import ColorPickerPopover from './ColorPickerPopover';
+import { ColorSwatch } from './ColorPicker';
 import AlgorithmSelect from './AlgorithmSelect';
 import Slider from './CustomSlider';
 import Button from './Button';
@@ -19,8 +19,7 @@ export default function LayerPropertiesPanel({
   onDuplicate,
   canRemove,
   palette,
-  colorKeys,
-  onUpdatePaletteColor
+  colorKeys
 }) {
   const algoInfo = DITHER_ALGORITHMS[layer.ditherType];
   const isHalftone = algoInfo?.category === 'halftone';
@@ -135,25 +134,14 @@ export default function LayerPropertiesPanel({
                 const color = palette[key];
                 if (!color) return null;
                 return (
-                  <div
+                  <ColorSwatch
                     key={key}
-                    style={{
-                      height: '32px',
-                      position: 'relative',
-                      outline: layer.colorKey === key ? '2px solid #fff' : 'none',
-                      outlineOffset: '-2px'
-                    }}
+                    color={color.hex}
+                    selected={layer.colorKey === key}
                     onClick={() => onUpdate({ ...layer, colorKey: key })}
-                  >
-                    <div onClick={(e) => e.stopPropagation()} style={{ height: '100%' }}>
-                      <ColorPickerPopover
-                        key={key}
-                        color={color.hex}
-                        onChange={(newHex) => onUpdatePaletteColor && onUpdatePaletteColor(key, newHex)}
-                        size="100%"
-                      />
-                    </div>
-                  </div>
+                    size="100%"
+                    style={{ height: '32px' }}
+                  />
                 );
               })}
             </div>
