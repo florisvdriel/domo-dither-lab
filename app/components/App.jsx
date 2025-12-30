@@ -46,7 +46,102 @@ export default function HalftoneLab() {
   const [inkBleedRoughness, setInkBleedRoughness] = useState(DEFAULT_STATE.inkBleedRoughness);
   const [paperTexture, setPaperTexture] = useState(DEFAULT_STATE.paperTexture);
 
-  const [layers, setLayers] = useState(DEFAULT_STATE.layers);
+  // Client-side only initialization to avoid hydration mismatch
+  const [isClient, setIsClient] = useState(false);
+  const [paletteState, setPaletteState] = useState({ palette: {}, layers: [] });
+
+  // Initialize palette and layers only on client side
+  useEffect(() => {
+    setIsClient(true);
+
+    // Load or generate palette
+    const saved = loadCustomPalette();
+    let initialPalette;
+
+    if (Object.keys(saved).length > 0) {
+      initialPalette = saved;
+    } else {
+      // Generate a random 8-color palette on first load
+      const harmonyTypes = ['tetradic', 'analogous', 'triadic', 'splitComplementary'];
+      const randomHarmony1 = harmonyTypes[Math.floor(Math.random() * harmonyTypes.length)];
+      const randomHarmony2 = harmonyTypes[Math.floor(Math.random() * harmonyTypes.length)];
+      let newPalette = generateNamedPalette(randomHarmony1);
+      const secondPalette = generateNamedPalette(randomHarmony2);
+
+      // Merge palettes to get more colors
+      Object.entries(secondPalette).forEach(([key, value]) => {
+        if (!newPalette[key]) {
+          newPalette[key] = value;
+        }
+      });
+
+      // Ensure we have exactly 8 colors
+      const paletteEntries = Object.entries(newPalette);
+      if (paletteEntries.length > 8) {
+        newPalette = Object.fromEntries(paletteEntries.slice(0, 8));
+      } else if (paletteEntries.length < 8) {
+        // If less than 8, generate more colors
+        const additionalPalette = generateNamedPalette('tetradic');
+        const additionalEntries = Object.entries(additionalPalette);
+        let i = 0;
+        while (Object.keys(newPalette).length < 8 && i < additionalEntries.length) {
+          const [key, value] = additionalEntries[i];
+          if (!newPalette[key]) {
+            newPalette[key] = value;
+          }
+          i++;
+        }
+      }
+
+      initialPalette = newPalette;
+    }
+
+    // Initialize layers with first color from palette
+    const firstColorKey = Object.keys(initialPalette)[0] || 'amber';
+    const initialLayers = [{
+      id: 1,
+      colorKey: firstColorKey,
+      ditherType: 'halftoneCircle',
+      threshold: 1.0,
+      scale: 8,
+      angle: 15,
+      offsetX: 0,
+      offsetY: 0,
+      blendMode: 'multiply',
+      opacity: 1,
+      visible: true,
+      knockout: false
+    }];
+
+    setPaletteState({ palette: initialPalette, layers: initialLayers });
+    setLayers(initialLayers);
+  }, []);
+
+  const palette = paletteState.palette;
+  const [layers, setLayers] = useState([{
+    id: 1,
+    colorKey: 'amber',
+    ditherType: 'halftoneCircle',
+    threshold: 1.0,
+    scale: 8,
+    angle: 15,
+    offsetX: 0,
+    offsetY: 0,
+    blendMode: 'multiply',
+    opacity: 1,
+    visible: true,
+    knockout: false
+  }]);
+
+  // Wrapper for setPalette to update the combined state
+  const setPalette = useCallback((newPaletteOrUpdater) => {
+    setPaletteState(prev => ({
+      ...prev,
+      palette: typeof newPaletteOrUpdater === 'function'
+        ? newPaletteOrUpdater(prev.palette)
+        : newPaletteOrUpdater
+    }));
+  }, []);
 
   // Viewport architecture
   const [viewportSize, setViewportSize] = useState(DEFAULT_STATE.viewportSize);
@@ -64,17 +159,6 @@ export default function HalftoneLab() {
   // Custom presets
   const [customPresets, setCustomPresets] = useState(loadCustomPresets);
   const [showSaveModal, setShowSaveModal] = useState(false);
-
-  // Palette - load custom if exists, otherwise use default (without black/white for editing)
-  const [palette, setPalette] = useState(() => {
-    const saved = loadCustomPalette();
-    if (Object.keys(saved).length > 0) {
-      return saved;
-    }
-    // Extract color keys from DEFAULT_PALETTE (excluding white/black)
-    const { white, black, ...colors } = DEFAULT_PALETTE;
-    return colors;
-  });
 
   const [toastMessage, setToastMessage] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
@@ -198,7 +282,7 @@ export default function HalftoneLab() {
       }));
       prevPaletteKeysRef.current = currentKeys;
     }
-  }, [palette, layers]);
+  }, [palette]); // Removed 'layers' from dependencies to prevent issues
 
   // Debounce all processing-related state changes
   // Longer debounce for expensive operations
@@ -553,6 +637,74 @@ export default function HalftoneLab() {
 
   const toggleBackgroundLock = () => {
     setBackgroundLocked(prev => !prev);
+  };
+
+  // Preset palettes
+  const PRESET_PALETTES = {
+    vibrant: {
+      coral: { name: 'Coral', hex: '#FF6B6B', rgb: [255, 107, 107] },
+      turquoise: { name: 'Turquoise', hex: '#4ECDC4', rgb: [78, 205, 196] },
+      gold: { name: 'Gold', hex: '#FFE66D', rgb: [255, 230, 109] },
+      violet: { name: 'Violet', hex: '#A8E6CF', rgb: [168, 230, 207] },
+      pink: { name: 'Pink', hex: '#FF8B94', rgb: [255, 139, 148] },
+      blue: { name: 'Blue', hex: '#95E1D3', rgb: [149, 225, 211] },
+      peach: { name: 'Peach', hex: '#FFAAA5', rgb: [255, 170, 165] },
+      mint: { name: 'Mint', hex: '#C7CEEA', rgb: [199, 206, 234] }
+    },
+    pastel: {
+      rose: { name: 'Rose', hex: '#FFB3BA', rgb: [255, 179, 186] },
+      peach: { name: 'Peach', hex: '#FFDFBA', rgb: [255, 223, 186] },
+      cream: { name: 'Cream', hex: '#FFFFBA', rgb: [255, 255, 186] },
+      mint: { name: 'Mint', hex: '#BAFFC9', rgb: [186, 255, 201] },
+      sky: { name: 'Sky', hex: '#BAE1FF', rgb: [186, 225, 255] },
+      lavender: { name: 'Lavender', hex: '#E0BBE4', rgb: [224, 187, 228] },
+      lilac: { name: 'Lilac', hex: '#D4A5A5', rgb: [212, 165, 165] },
+      sage: { name: 'Sage', hex: '#C9E4CA', rgb: [201, 228, 202] }
+    },
+    earthy: {
+      terracotta: { name: 'Terracotta', hex: '#E07A5F', rgb: [224, 122, 95] },
+      sage: { name: 'Sage', hex: '#81B29A', rgb: [129, 178, 154] },
+      sand: { name: 'Sand', hex: '#F2CC8F', rgb: [242, 204, 143] },
+      clay: { name: 'Clay', hex: '#C77D58', rgb: [199, 125, 88] },
+      moss: { name: 'Moss', hex: '#6B8E65', rgb: [107, 142, 101] },
+      stone: { name: 'Stone', hex: '#A8AAAA', rgb: [168, 170, 170] },
+      bark: { name: 'Bark', hex: '#8B6F47', rgb: [139, 111, 71] },
+      leaf: { name: 'Leaf', hex: '#9DAD7F', rgb: [157, 173, 127] }
+    },
+    neon: {
+      pink: { name: 'Pink', hex: '#FF006E', rgb: [255, 0, 110] },
+      yellow: { name: 'Yellow', hex: '#FFBE0B', rgb: [255, 190, 11] },
+      cyan: { name: 'Cyan', hex: '#00F5FF', rgb: [0, 245, 255] },
+      green: { name: 'Green', hex: '#8AC926', rgb: [138, 201, 38] },
+      purple: { name: 'Purple', hex: '#B5179E', rgb: [181, 23, 158] },
+      orange: { name: 'Orange', hex: '#FB5607', rgb: [251, 86, 7] },
+      blue: { name: 'Blue', hex: '#3A86FF', rgb: [58, 134, 255] },
+      magenta: { name: 'Magenta', hex: '#FF006E', rgb: [255, 0, 110] }
+    }
+  };
+
+  const applyPresetPalette = (presetName) => {
+    const presetPalette = PRESET_PALETTES[presetName];
+    if (!presetPalette) return;
+
+    // Update palette
+    setPalette(presetPalette);
+    saveCustomPalette(presetPalette);
+
+    // Get the new palette keys
+    const newKeys = Object.keys(presetPalette);
+
+    // Update layers to use new palette keys
+    setLayers(prevLayers => prevLayers.map((layer, index) => {
+      // Remap to index-based key
+      return {
+        ...layer,
+        colorKey: newKeys[index % newKeys.length]
+      };
+    }));
+
+    // Update the ref to prevent useLayoutEffect from triggering another remap
+    prevPaletteKeysRef.current = newKeys;
   };
 
   const randomizePalette = () => {
@@ -1564,6 +1716,8 @@ export default function HalftoneLab() {
           colorKeys={colorKeys}
           onUpdatePaletteColor={updatePaletteColor}
           onRandomizePalette={randomizePalette}
+          onApplyPreset={applyPresetPalette}
+          presetNames={Object.keys(PRESET_PALETTES)}
           activePalette={activePalette}
           onToggleLayerLock={toggleLayerLock}
           backgroundLocked={backgroundLocked}

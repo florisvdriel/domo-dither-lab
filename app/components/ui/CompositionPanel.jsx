@@ -48,6 +48,8 @@ export default function CompositionPanel({
   colorKeys,
   onUpdatePaletteColor,
   onRandomizePalette,
+  onApplyPreset,
+  presetNames = [],
   activePalette,
   onToggleLayerLock,
   onReorderLayers,
@@ -312,6 +314,40 @@ export default function CompositionPanel({
                 </div>
               );
             })}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
+            {presetNames.map((presetName) => (
+              <button
+                key={presetName}
+                onClick={() => onApplyPreset(presetName)}
+                style={{
+                  padding: '8px',
+                  backgroundColor: '#111',
+                  color: '#999',
+                  border: '1px solid #222',
+                  borderRadius: 0,
+                  cursor: 'pointer',
+                  fontSize: '9px',
+                  fontFamily: 'monospace',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.backgroundColor = '#1a1a1a';
+                  e.target.style.color = '#fff';
+                  e.target.style.borderColor = '#333';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.backgroundColor = '#111';
+                  e.target.style.color = '#999';
+                  e.target.style.borderColor = '#222';
+                }}
+              >
+                {presetName}
+              </button>
+            ))}
           </div>
 
           <Button onClick={onRandomizePalette}>

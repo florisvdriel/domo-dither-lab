@@ -19,6 +19,7 @@ export default function LayerPropertiesPanel({
   onDuplicate,
   canRemove,
   palette,
+  colorKeys,
   onUpdatePaletteColor
 }) {
   const algoInfo = DITHER_ALGORITHMS[layer.ditherType];
@@ -130,9 +131,10 @@ export default function LayerPropertiesPanel({
               COLOR
             </label>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
-              {Object.entries(palette)
-                .filter(([k]) => !['white', 'black'].includes(k))
-                .map(([key, color]) => (
+              {colorKeys.map((key) => {
+                const color = palette[key];
+                if (!color) return null;
+                return (
                   <div
                     key={key}
                     style={{
@@ -152,7 +154,8 @@ export default function LayerPropertiesPanel({
                       />
                     </div>
                   </div>
-                ))}
+                );
+              })}
             </div>
           </div>
 

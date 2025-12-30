@@ -105,6 +105,7 @@ export default function RightPanel({
             onDuplicate={onDuplicateLayer}
             canRemove={totalLayers > 1}
             palette={activePalette}
+            colorKeys={colorKeys}
             onUpdatePaletteColor={onUpdatePaletteColor}
           />
         ) : null;
