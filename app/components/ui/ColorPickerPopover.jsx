@@ -23,6 +23,7 @@ export default function ColorPickerPopover({ color, onChange, size = 36 }) {
       </PopoverTrigger>
 
       <PopoverContent
+        data-color-picker-popup
         className="bg-[#0a0a0a] border border-[#222] rounded-none p-3 shadow-[0_8px_24px_rgba(0,0,0,0.5)] z-50 w-auto"
         side="bottom"
         align="start"

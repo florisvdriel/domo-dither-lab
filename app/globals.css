@@ -138,34 +138,46 @@
     /* #444 */
   }
 
-  /* Color picker popover styles */
-  .react-colorful {
-    width: 180px !important;
-    height: 180px !important;
+  /* Color picker popover styles - scoped to popup only */
+  [data-color-picker-popup] {
+    --picker-size: 180px;
+    --hue-height: 8px;
+    --hue-gap: 8px;
+    --pointer-size: 10px;
   }
 
-  .react-colorful__saturation {
+  [data-color-picker-popup] .react-colorful {
+    width: var(--picker-size) !important;
+    height: var(--picker-size) !important;
+  }
+
+  [data-color-picker-popup] .react-colorful__saturation {
     border-radius: 0 !important;
-    height: 160px !important;
-    /* 180px total - 10px hue - 10px margin */
-    margin-bottom: 10px !important;
+    height: calc(100% - var(--hue-height) - var(--hue-gap)) !important;
+    margin-bottom: var(--hue-gap) !important;
     border-bottom: none !important;
   }
 
-  .react-colorful__hue {
+  [data-color-picker-popup] .react-colorful__hue {
     border-radius: 0 !important;
-    height: 10px !important;
+    height: var(--hue-height) !important;
     margin-top: 0 !important;
-    /* controlled by saturation margin */
   }
 
-  .react-colorful__hue-pointer,
-  .react-colorful__saturation-pointer {
-    width: 12px !important;
-    /* Slightly smaller for precision */
-    height: 12px !important;
+  /* Target the correct pointer class used by react-colorful v5 */
+  [data-color-picker-popup] .react-colorful__pointer {
+    width: var(--pointer-size) !important;
+    height: var(--pointer-size) !important;
     border-radius: 0 !important;
     border: 2px solid #fff !important;
-    /* Ensure visibility */
+  }
+
+  /* Fallback for older class names (safety) */
+  [data-color-picker-popup] .react-colorful__hue-pointer,
+  [data-color-picker-popup] .react-colorful__saturation-pointer {
+    width: var(--pointer-size) !important;
+    height: var(--pointer-size) !important;
+    border-radius: 0 !important;
+    border: 2px solid #fff !important;
   }
 }
