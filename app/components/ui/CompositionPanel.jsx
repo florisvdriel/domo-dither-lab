@@ -278,13 +278,22 @@ export default function CompositionPanel({
       }}>
         <SectionHeader title="PALETTE" />
         <div style={{ padding: '0 16px 16px' }}>
+          {/* Helper text at the top */}
+          <p style={{
+            fontSize: '9px',
+            color: '#666',
+            margin: '12px 0 12px 0',
+            lineHeight: '1.4'
+          }}>
+            Define your 8-color palette here. Layer colors will use these colors.
+          </p>
+
           {/* Color swatches in 4x2 grid filling full width */}
           <div
             style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(4, 1fr)',
-              gap: '6px',
-              marginTop: '12px',
+              gap: '8px',
               marginBottom: '12px'
             }}>
             {colorKeys.map((key, idx) => {
@@ -310,7 +319,6 @@ export default function CompositionPanel({
                     onChange={(newHex) => onUpdatePaletteColor(key, newHex)}
                     size="100%"
                   />
-                  {/* Lock button removed - using layer locking instead */}
                 </div>
               );
             })}
@@ -358,9 +366,10 @@ export default function CompositionPanel({
             fontSize: '9px',
             color: '#444',
             margin: '8px 0 0 0',
-            textAlign: 'center'
+            textAlign: 'center',
+            fontStyle: 'italic'
           }}>
-            Click swatches to edit • Lock to preserve
+            Click swatches to edit colors
           </p>
         </div>
       </div>
