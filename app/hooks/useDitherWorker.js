@@ -14,12 +14,12 @@ export function useDitherWorker() {
   // Initialize worker on mount
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    
+
     try {
       // Create worker from the worker file
-      workerRef.current = new Worker(
-        new URL('../workers/ditherWorker.js', import.meta.url)
-      );
+      // Use conditional import to avoid issues with SSR and build optimization
+      const workerUrl = new URL('../workers/ditherWorker.js', import.meta.url);
+      workerRef.current = new Worker(workerUrl, { type: 'module' });
       
       // Handle messages from worker
       workerRef.current.onmessage = (e) => {
