@@ -21,7 +21,9 @@ export default function LayerItem({
   onDragOver,
   onDrop,
   onDragEnd,
-  onToggleLock
+  onToggleLock,
+  onMoveUp,
+  onMoveDown
 }) {
   const [hovering, setHovering] = useState(false);
   const algoInfo = DITHER_ALGORITHMS[layer.ditherType];
@@ -29,13 +31,28 @@ export default function LayerItem({
   const isLocked = layer.locked === true;
   const layerColor = palette[layer.colorKey]?.hex || '#fff';
 
+  // Keyboard handler for layer reordering
+  const handleKeyDown = (e) => {
+    if (e.key === 'ArrowUp' && e.altKey && index > 0) {
+      e.preventDefault();
+      onMoveUp?.();
+    } else if (e.key === 'ArrowDown' && e.altKey && index < totalLayers - 1) {
+      e.preventDefault();
+      onMoveDown?.();
+    }
+  };
+
   return (
     <div
       draggable={draggable}
+      tabIndex={0}
+      role="button"
+      aria-label={`Layer ${index + 1}, ${algoInfo?.name || 'Unknown'}. Press Alt+Up or Alt+Down to reorder.`}
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDrop={onDrop}
       onDragEnd={onDragEnd}
+      onKeyDown={handleKeyDown}
       style={{
         marginBottom: '6px',
         backgroundColor: isSelected ? COLORS.bg.tertiary : COLORS.bg.secondary,
@@ -44,11 +61,19 @@ export default function LayerItem({
         transition: TRANSITIONS.fast,
         opacity: isVisible ? 1 : 0.5,
         cursor: 'grab',
-        boxShadow: hovering ? '0 4px 12px rgba(0,0,0,0.3)' : 'none'
+        boxShadow: hovering ? '0 4px 12px rgba(0,0,0,0.3)' : 'none',
+        outline: 'none'
       }}
       onMouseEnter={() => setHovering(true)}
       onMouseLeave={() => setHovering(false)}
       onClick={onSelect}
+      onFocus={(e) => {
+        e.currentTarget.style.outline = `2px solid ${COLORS.border.strong}`;
+        e.currentTarget.style.outlineOffset = '2px';
+      }}
+      onBlur={(e) => {
+        e.currentTarget.style.outline = 'none';
+      }}
     >
       <div style={{ display: 'flex' }}>
         {/* Color indicator stripe */}

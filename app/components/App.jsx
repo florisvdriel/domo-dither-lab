@@ -28,6 +28,11 @@ import ComparisonSlider from './ui/ComparisonSlider';
 import SavePresetModal from './ui/SavePresetModal';
 import RightPanel from './ui/RightPanel';
 import CompositionPanel from './ui/CompositionPanel';
+import KeyboardShortcutsDialog from './ui/KeyboardShortcutsDialog';
+
+// Keyboard shortcuts
+import { COMMANDS, matchesShortcut } from '../utils/commands';
+import { useUndoRedo } from '../hooks/useUndoRedo';
 
 
 export default function HalftoneLab() {
@@ -117,6 +122,15 @@ export default function HalftoneLab() {
     setLayers(initialLayers);
   }, []);
 
+  // Initialize undo/redo history after initial state is set
+  useEffect(() => {
+    if (isClient && palette && Object.keys(palette).length > 0 && historyRef.current.length === 0) {
+      const initialSnapshot = captureSnapshot();
+      historyRef.current = [initialSnapshot];
+      historyIndexRef.current = 0;
+    }
+  }, [isClient, palette, captureSnapshot]);
+
   const palette = paletteState.palette;
   const [layers, setLayers] = useState([{
     id: 1,
@@ -162,6 +176,15 @@ export default function HalftoneLab() {
 
   const [toastMessage, setToastMessage] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
+
+  // Keyboard shortcuts dialog
+  const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
+
+  // Undo/Redo history management
+  const historyRef = useRef([]);
+  const historyIndexRef = useRef(-1);
+  const isRestoringRef = useRef(false);
+  const MAX_HISTORY = 50;
 
   // Locked colors - preserved during randomization
   const [lockedColors, setLockedColors] = useState(new Set());
@@ -241,6 +264,99 @@ export default function HalftoneLab() {
       setBackgroundColorRaw(colorOrKey);
     }
   }, [activePalette]);
+
+  // Undo/Redo: Capture current undoable state
+  const captureSnapshot = useCallback(() => {
+    return {
+      layers: JSON.parse(JSON.stringify(layers)),
+      brightness,
+      contrast,
+      invert,
+      imageScale,
+      preBlur,
+      backgroundColorRaw,
+      backgroundColorKey,
+      palette: JSON.parse(JSON.stringify(palette)),
+      inkBleed,
+      inkBleedAmount,
+      inkBleedRoughness,
+      paperTexture
+    };
+  }, [layers, brightness, contrast, invert, imageScale, preBlur, backgroundColorRaw, backgroundColorKey, palette, inkBleed, inkBleedAmount, inkBleedRoughness, paperTexture]);
+
+  // Undo/Redo: Push current state to history
+  const pushHistory = useCallback(() => {
+    if (isRestoringRef.current) return;
+
+    const snapshot = captureSnapshot();
+    const currentHistory = historyRef.current;
+    const currentIndex = historyIndexRef.current;
+
+    // Remove any future history if we're not at the end
+    const newHistory = currentHistory.slice(0, currentIndex + 1);
+
+    // Add new snapshot
+    newHistory.push(snapshot);
+
+    // Update index to point to the new snapshot
+    historyIndexRef.current = newHistory.length - 1;
+
+    // Limit history size
+    if (newHistory.length > MAX_HISTORY) {
+      newHistory.shift();
+      historyIndexRef.current = MAX_HISTORY - 1;
+    }
+
+    historyRef.current = newHistory;
+  }, [captureSnapshot, MAX_HISTORY]);
+
+  // Undo/Redo: Restore state from snapshot
+  const restoreSnapshot = useCallback((snapshot) => {
+    isRestoringRef.current = true;
+
+    setLayers(snapshot.layers);
+    setBrightness(snapshot.brightness);
+    setContrast(snapshot.contrast);
+    setInvert(snapshot.invert);
+    setImageScale(snapshot.imageScale);
+    setPreBlur(snapshot.preBlur);
+    setBackgroundColorRaw(snapshot.backgroundColorRaw);
+    setBackgroundColorKey(snapshot.backgroundColorKey);
+    setPalette(snapshot.palette);
+    setInkBleed(snapshot.inkBleed);
+    setInkBleedAmount(snapshot.inkBleedAmount);
+    setInkBleedRoughness(snapshot.inkBleedRoughness);
+    setPaperTexture(snapshot.paperTexture);
+
+    // Use setTimeout to reset the flag after state updates complete
+    setTimeout(() => {
+      isRestoringRef.current = false;
+    }, 0);
+  }, []);
+
+  // Undo/Redo: Undo action
+  const undo = useCallback(() => {
+    if (historyIndexRef.current <= 0) return;
+
+    const newIndex = historyIndexRef.current - 1;
+    historyIndexRef.current = newIndex;
+    restoreSnapshot(historyRef.current[newIndex]);
+    showToast('Undo');
+  }, [restoreSnapshot]);
+
+  // Undo/Redo: Redo action
+  const redo = useCallback(() => {
+    if (historyIndexRef.current >= historyRef.current.length - 1) return;
+
+    const newIndex = historyIndexRef.current + 1;
+    historyIndexRef.current = newIndex;
+    restoreSnapshot(historyRef.current[newIndex]);
+    showToast('Redo');
+  }, [restoreSnapshot]);
+
+  // Undo/Redo: Check if we can undo/redo
+  const canUndo = historyIndexRef.current > 0;
+  const canRedo = historyIndexRef.current < historyRef.current.length - 1;
 
   // Get the currently selected layer (if any)
   const selectedLayer = useMemo(() => {
@@ -434,13 +550,19 @@ export default function HalftoneLab() {
   });
 
   const addLayer = () => {
-    if (layers.length < 10) setLayers([...layers, createDefaultLayer()]);
+    if (layers.length < 10) {
+      const newLayers = [...layers, createDefaultLayer()];
+      setLayers(newLayers);
+      // Push history after state change using the new value
+      setTimeout(() => pushHistory(), 0);
+    }
   };
 
   const updateLayer = (index, newLayer) => {
     const newLayers = [...layers];
     newLayers[index] = newLayer;
     setLayers(newLayers);
+    setTimeout(() => pushHistory(), 0);
   };
 
   const removeLayer = (index) => {
@@ -449,12 +571,14 @@ export default function HalftoneLab() {
       setSelection({ type: 'project', id: null });
     }
     setLayers(layers.filter((_, i) => i !== index));
+    setTimeout(() => pushHistory(), 0);
   };
 
   const toggleLayerVisibility = (index) => {
     const newLayers = [...layers];
     newLayers[index] = { ...newLayers[index], visible: newLayers[index].visible === false ? true : false };
     setLayers(newLayers);
+    setTimeout(() => pushHistory(), 0);
   };
 
   const duplicateLayer = (index) => {
@@ -463,6 +587,7 @@ export default function HalftoneLab() {
     const newLayers = [...layers];
     newLayers.splice(index + 1, 0, newLayer);
     setLayers(newLayers);
+    setTimeout(() => pushHistory(), 0);
   };
 
   const moveLayerUp = (index) => {
@@ -470,6 +595,7 @@ export default function HalftoneLab() {
     const newLayers = [...layers];
     [newLayers[index - 1], newLayers[index]] = [newLayers[index], newLayers[index - 1]];
     setLayers(newLayers);
+    setTimeout(() => pushHistory(), 0);
   };
 
   const moveLayerDown = (index) => {
@@ -477,6 +603,7 @@ export default function HalftoneLab() {
     const newLayers = [...layers];
     [newLayers[index], newLayers[index + 1]] = [newLayers[index + 1], newLayers[index]];
     setLayers(newLayers);
+    setTimeout(() => pushHistory(), 0);
   };
 
   // Apply preset
@@ -627,12 +754,14 @@ export default function HalftoneLab() {
     };
     setPalette(newPalette);
     saveCustomPalette(newPalette);
+    setTimeout(() => pushHistory(), 0);
   };
 
   const toggleLayerLock = (index) => {
     setLayers(prev => prev.map((layer, i) =>
       i === index ? { ...layer, locked: !layer.locked } : layer
     ));
+    setTimeout(() => pushHistory(), 0);
   };
 
   const toggleBackgroundLock = () => {
@@ -705,6 +834,8 @@ export default function HalftoneLab() {
 
     // Update the ref to prevent useLayoutEffect from triggering another remap
     prevPaletteKeysRef.current = newKeys;
+
+    setTimeout(() => pushHistory(), 0);
   };
 
   const randomizePalette = () => {
@@ -809,6 +940,8 @@ export default function HalftoneLab() {
 
     const lockedCount = layers.filter(l => l.locked).length;
     showToast(lockedCount > 0 ? `Palette randomized (${lockedCount} layers locked)` : 'Palette randomized');
+
+    setTimeout(() => pushHistory(), 0);
   };
 
   const resetPalette = () => {
@@ -908,6 +1041,7 @@ export default function HalftoneLab() {
       newLayers.splice(toIndex, 0, movedLayer);
       return newLayers;
     });
+    setTimeout(() => pushHistory(), 0);
   };
 
   const handleImageUpload = (e) => {
@@ -1650,6 +1784,106 @@ export default function HalftoneLab() {
     }
   }, [image, previewImage, debouncedImageScale, layers, backgroundColor, getSourceImageData, activePalette]);
 
+  // Global keyboard shortcut handler
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Skip if user is typing in an input field
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+        return;
+      }
+
+      // Undo (Cmd/Ctrl + Z)
+      if (matchesShortcut(e, COMMANDS.UNDO.shortcuts[0])) {
+        e.preventDefault();
+        undo();
+        return;
+      }
+
+      // Redo (Cmd/Ctrl + Shift + Z)
+      if (matchesShortcut(e, COMMANDS.REDO.shortcuts[0])) {
+        e.preventDefault();
+        redo();
+        return;
+      }
+
+      // Help dialog
+      if (matchesShortcut(e, COMMANDS.SHOW_SHORTCUTS.shortcuts[0]) ||
+          matchesShortcut(e, COMMANDS.SHOW_SHORTCUTS.shortcuts[1])) {
+        e.preventDefault();
+        setShowKeyboardShortcuts(true);
+        return;
+      }
+
+      // Close dialogs with ESC is handled in the dialog components themselves
+
+      // Canvas zoom and pan (only when image exists and not in comparison mode)
+      if (image) {
+        // Zoom In (Cmd/Ctrl + =  or Cmd/Ctrl + +)
+        if (matchesShortcut(e, COMMANDS.ZOOM_IN.shortcuts[0]) ||
+            matchesShortcut(e, COMMANDS.ZOOM_IN.shortcuts[1])) {
+          e.preventDefault();
+          setImageTransform(prev => ({
+            ...prev,
+            scale: Math.min(8, prev.scale * 1.5)
+          }));
+          return;
+        }
+
+        // Zoom Out (Cmd/Ctrl + -)
+        if (matchesShortcut(e, COMMANDS.ZOOM_OUT.shortcuts[0])) {
+          e.preventDefault();
+          setImageTransform(prev => ({
+            ...prev,
+            scale: Math.max(0.25, prev.scale / 1.5)
+          }));
+          return;
+        }
+
+        // Reset Zoom (0)
+        if (matchesShortcut(e, COMMANDS.ZOOM_RESET.shortcuts[0]) && !showComparison) {
+          e.preventDefault();
+          resetView();
+          return;
+        }
+
+        // Pan controls (only when not in comparison mode)
+        if (!showComparison) {
+          const panAmount = 20;
+
+          if (matchesShortcut(e, COMMANDS.PAN_LEFT.shortcuts[0])) {
+            e.preventDefault();
+            setImageTransform(prev => ({ ...prev, x: prev.x - panAmount }));
+            return;
+          }
+
+          if (matchesShortcut(e, COMMANDS.PAN_RIGHT.shortcuts[0])) {
+            e.preventDefault();
+            setImageTransform(prev => ({ ...prev, x: prev.x + panAmount }));
+            return;
+          }
+
+          if (matchesShortcut(e, COMMANDS.PAN_UP.shortcuts[0])) {
+            e.preventDefault();
+            setImageTransform(prev => ({ ...prev, y: prev.y - panAmount }));
+            return;
+          }
+
+          if (matchesShortcut(e, COMMANDS.PAN_DOWN.shortcuts[0])) {
+            e.preventDefault();
+            setImageTransform(prev => ({ ...prev, y: prev.y + panAmount }));
+            return;
+          }
+        }
+      }
+
+      // Note: Comparison slider arrow keys are handled in ComparisonSlider component
+      // Note: Layer reordering Alt+arrows are handled in LayerItem component
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [image, showComparison, undo, redo]);
+
   return (
     <div style={{ display: 'flex', height: '100vh', backgroundColor: COLORS.bg.primary, color: COLORS.text.primary, fontFamily: FONTS.ui }}>
       {/* Hidden file inputs */}
@@ -1712,6 +1946,8 @@ export default function HalftoneLab() {
           onToggleLayerVisibility={toggleLayerVisibility}
           onDuplicateLayer={duplicateLayer}
           onRemoveLayer={removeLayer}
+          onMoveLayerUp={moveLayerUp}
+          onMoveLayerDown={moveLayerDown}
           palette={palette}
           colorKeys={colorKeys}
           onUpdatePaletteColor={updatePaletteColor}
@@ -1748,6 +1984,8 @@ export default function HalftoneLab() {
       >
         <div
           ref={canvasContainerRef}
+          tabIndex={image ? 0 : -1}
+          aria-label={image ? "Canvas viewport. Use Cmd+Plus and Cmd+Minus to zoom, arrow keys to pan, 0 to reset view." : undefined}
           style={{
             flex: 1,
             display: 'flex',
@@ -1757,7 +1995,8 @@ export default function HalftoneLab() {
             backgroundColor: COLORS.bg.primary,
             overflow: 'hidden',
             position: 'relative',
-            cursor: isPanning ? 'grabbing' : (image && !showComparison ? 'grab' : 'default')
+            cursor: isPanning ? 'grabbing' : (image && !showComparison ? 'grab' : 'default'),
+            outline: 'none'
           }}
           onWheel={handleWheel}
           onMouseDown={handleMouseDown}
@@ -1982,6 +2221,12 @@ export default function HalftoneLab() {
         <SavePresetModal
           onSave={saveCustomPreset}
           onCancel={() => setShowSaveModal(false)}
+        />
+      )}
+
+      {showKeyboardShortcuts && (
+        <KeyboardShortcutsDialog
+          onClose={() => setShowKeyboardShortcuts(false)}
         />
       )}
     </div>

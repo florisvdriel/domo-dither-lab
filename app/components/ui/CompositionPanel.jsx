@@ -43,6 +43,8 @@ export default function CompositionPanel({
   onToggleLayerVisibility,
   onDuplicateLayer,
   onRemoveLayer,
+  onMoveLayerUp,
+  onMoveLayerDown,
   // Palette
   palette,
   colorKeys,
@@ -250,6 +252,8 @@ export default function CompositionPanel({
               onToggleVisibility={() => onToggleLayerVisibility(i)}
               onDuplicate={() => onDuplicateLayer(i)}
               onRemove={() => onRemoveLayer(i)}
+              onMoveUp={() => onMoveLayerUp && onMoveLayerUp(i)}
+              onMoveDown={() => onMoveLayerDown && onMoveLayerDown(i)}
               canRemove={layers.length > 1}
               palette={activePalette}
               isSelected={selection.type === 'layer' && selection.id === layer.id}

@@ -5,27 +5,41 @@ import { useState, useRef, useEffect } from 'react';
 export default function ComparisonSlider({ position, onChange }) {
   const [dragging, setDragging] = useState(false);
   const containerRef = useRef(null);
-  
+  const handleRef = useRef(null);
+
   const handleMouseDown = (e) => {
     e.preventDefault();
     setDragging(true);
   };
-  
+
+  // Keyboard navigation
+  const handleKeyDown = (e) => {
+    const step = 0.05; // 5% increments
+
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      onChange(Math.max(0, position - step));
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      onChange(Math.min(1, position + step));
+    }
+  };
+
   useEffect(() => {
     if (!dragging) return;
-    
+
     const handleMouseMove = (e) => {
       if (!containerRef.current) return;
       const rect = containerRef.current.getBoundingClientRect();
       const x = (e.clientX - rect.left) / rect.width;
       onChange(Math.max(0, Math.min(1, x)));
     };
-    
+
     const handleMouseUp = () => setDragging(false);
-    
+
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
-    
+
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
@@ -59,7 +73,16 @@ export default function ComparisonSlider({ position, onChange }) {
       
       {/* Drag handle */}
       <div
+        ref={handleRef}
+        tabIndex={0}
+        role="slider"
+        aria-label="Comparison slider position"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(position * 100)}
+        aria-valuetext={`${Math.round(position * 100)}% original visible`}
         onMouseDown={handleMouseDown}
+        onKeyDown={handleKeyDown}
         style={{
           position: 'absolute',
           left: `${position * 100}%`,
@@ -74,7 +97,15 @@ export default function ComparisonSlider({ position, onChange }) {
           justifyContent: 'center',
           cursor: 'ew-resize',
           boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-          zIndex: 7
+          zIndex: 7,
+          outline: 'none'
+        }}
+        onFocus={(e) => {
+          e.target.style.outline = '2px solid #fff';
+          e.target.style.outlineOffset = '2px';
+        }}
+        onBlur={(e) => {
+          e.target.style.outline = 'none';
         }}
       >
         <span style={{ fontSize: '14px', color: '#000', userSelect: 'none' }}>⟷</span>
