@@ -122,6 +122,8 @@ export default function HalftoneLab() {
     setLayers(initialLayers);
   }, []);
 
+  const palette = paletteState.palette;
+
   // Initialize undo/redo history after initial state is set
   useEffect(() => {
     if (isClient && palette && Object.keys(palette).length > 0 && historyRef.current.length === 0) {
@@ -130,8 +132,6 @@ export default function HalftoneLab() {
       historyIndexRef.current = 0;
     }
   }, [isClient, palette, captureSnapshot]);
-
-  const palette = paletteState.palette;
   const [layers, setLayers] = useState([{
     id: 1,
     colorKey: 'amber',
