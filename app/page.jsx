@@ -1,4 +1,8 @@
-import HalftoneLab from './components/App';
+import dynamic from 'next/dynamic';
+
+const HalftoneLab = dynamic(() => import('./components/App'), {
+  ssr: false,
+});
 
 export default function Home() {
   return <HalftoneLab />;

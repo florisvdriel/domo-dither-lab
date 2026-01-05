@@ -9,7 +9,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
+import Button from './Button';
 
 export default function SavePresetModal({ onSave, onCancel }) {
   const [name, setName] = useState('');
@@ -88,16 +88,15 @@ export default function SavePresetModal({ onSave, onCancel }) {
           style={{ padding: '0 24px 24px' }}
         >
           <Button
-            variant="outline"
             onClick={onCancel}
-            className="flex-1 font-mono text-xs border-[#333] bg-transparent text-white hover:bg-[#222] hover:border-[#444]"
+            style={{ flex: 1 }}
           >
             Cancel
           </Button>
           <Button
+            primary
             onClick={handleSave}
-            disabled={!name.trim()}
-            className="flex-1 font-mono text-xs bg-white text-black hover:bg-white/90 disabled:opacity-30 disabled:cursor-not-allowed"
+            style={{ flex: 1 }}
           >
             Save
           </Button>
