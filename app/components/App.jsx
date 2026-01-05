@@ -124,14 +124,6 @@ export default function HalftoneLab() {
 
   const palette = paletteState.palette;
 
-  // Initialize undo/redo history after initial state is set
-  useEffect(() => {
-    if (isClient && palette && Object.keys(palette).length > 0 && historyRef.current.length === 0) {
-      const initialSnapshot = captureSnapshot();
-      historyRef.current = [initialSnapshot];
-      historyIndexRef.current = 0;
-    }
-  }, [isClient, palette, captureSnapshot]);
   const [layers, setLayers] = useState([{
     id: 1,
     colorKey: 'amber',
@@ -146,6 +138,34 @@ export default function HalftoneLab() {
     visible: true,
     knockout: false
   }]);
+
+  // Undo/Redo: Capture current undoable state
+  const captureSnapshot = useCallback(() => {
+    return {
+      layers: JSON.parse(JSON.stringify(layers)),
+      brightness,
+      contrast,
+      invert,
+      imageScale,
+      preBlur,
+      backgroundColorRaw,
+      backgroundColorKey,
+      palette: JSON.parse(JSON.stringify(palette)),
+      inkBleed,
+      inkBleedAmount,
+      inkBleedRoughness,
+      paperTexture
+    };
+  }, [layers, brightness, contrast, invert, imageScale, preBlur, backgroundColorRaw, backgroundColorKey, palette, inkBleed, inkBleedAmount, inkBleedRoughness, paperTexture]);
+
+  // Initialize undo/redo history after initial state is set
+  useEffect(() => {
+    if (isClient && palette && Object.keys(palette).length > 0 && historyRef.current.length === 0) {
+      const initialSnapshot = captureSnapshot();
+      historyRef.current = [initialSnapshot];
+      historyIndexRef.current = 0;
+    }
+  }, [isClient, palette, captureSnapshot]);
 
   // Wrapper for setPalette to update the combined state
   const setPalette = useCallback((newPaletteOrUpdater) => {
@@ -265,24 +285,7 @@ export default function HalftoneLab() {
     }
   }, [activePalette]);
 
-  // Undo/Redo: Capture current undoable state
-  const captureSnapshot = useCallback(() => {
-    return {
-      layers: JSON.parse(JSON.stringify(layers)),
-      brightness,
-      contrast,
-      invert,
-      imageScale,
-      preBlur,
-      backgroundColorRaw,
-      backgroundColorKey,
-      palette: JSON.parse(JSON.stringify(palette)),
-      inkBleed,
-      inkBleedAmount,
-      inkBleedRoughness,
-      paperTexture
-    };
-  }, [layers, brightness, contrast, invert, imageScale, preBlur, backgroundColorRaw, backgroundColorKey, palette, inkBleed, inkBleedAmount, inkBleedRoughness, paperTexture]);
+
 
   // Undo/Redo: Push current state to history
   const pushHistory = useCallback(() => {
@@ -1808,7 +1811,7 @@ export default function HalftoneLab() {
 
       // Help dialog
       if (matchesShortcut(e, COMMANDS.SHOW_SHORTCUTS.shortcuts[0]) ||
-          matchesShortcut(e, COMMANDS.SHOW_SHORTCUTS.shortcuts[1])) {
+        matchesShortcut(e, COMMANDS.SHOW_SHORTCUTS.shortcuts[1])) {
         e.preventDefault();
         setShowKeyboardShortcuts(true);
         return;
@@ -1820,7 +1823,7 @@ export default function HalftoneLab() {
       if (image) {
         // Zoom In (Cmd/Ctrl + =  or Cmd/Ctrl + +)
         if (matchesShortcut(e, COMMANDS.ZOOM_IN.shortcuts[0]) ||
-            matchesShortcut(e, COMMANDS.ZOOM_IN.shortcuts[1])) {
+          matchesShortcut(e, COMMANDS.ZOOM_IN.shortcuts[1])) {
           e.preventDefault();
           setImageTransform(prev => ({
             ...prev,
