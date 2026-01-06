@@ -8,6 +8,7 @@ import IconButton from './IconButton';
 import AlgorithmSelect from './AlgorithmSelect';
 import Slider from './CustomSlider';
 import CustomSelect from './CustomSelect';
+import { ColorSwatch } from './ColorPicker';
 
 export default function LayerPanel({ layer, index, totalLayers, onUpdate, onRemove, onDuplicate, onMoveUp, onMoveDown, canRemove, palette = null, onUpdatePaletteColor }) {
   const [expanded, setExpanded] = useState(true);
@@ -68,54 +69,23 @@ export default function LayerPanel({ layer, index, totalLayers, onUpdate, onRemo
                 <label style={{ display: 'block', color: '#666', fontSize: '10px', marginBottom: '8px', fontFamily: 'monospace', letterSpacing: '0.05em' }}>
                   COLOR
                 </label>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '8px 10px',
-                  backgroundColor: '#000',
-                  border: '1px solid #333'
-                }}>
-                  {/* Color swatch */}
-                  <div style={{
-                    width: '20px',
-                    height: '20px',
-                    backgroundColor: layerColor.hex,
-                    border: '1px solid #222',
-                    flexShrink: 0
-                  }} />
-
-                  {/* Color name */}
-                  <span style={{
-                    fontSize: '10px',
-                    fontFamily: 'monospace',
-                    color: '#fff',
-                    letterSpacing: '0.05em',
-                    textTransform: 'uppercase'
-                  }}>
-                    {layerColor.name}
-                  </span>
-
-                  {/* Helper icon/text */}
-                  <span style={{
-                    marginLeft: 'auto',
-                    fontSize: '9px',
-                    color: '#444',
-                    fontFamily: 'monospace'
-                  }}>
-                    ←
-                  </span>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {/* Fixed list of Domo colors to choose from */}
+                  {['blue', 'darkRed', 'red', 'green', 'gold'].map((key) => {
+                    const color = activePalette[key];
+                    if (!color) return null;
+                    return (
+                      <ColorSwatch
+                        key={key}
+                        color={color.hex}
+                        selected={layer.colorKey === key}
+                        onClick={() => onUpdate({ ...layer, colorKey: key })}
+                        size={32} // Large touch-friendly targets
+                        style={{ flex: 1, height: '32px' }} // Stretch to fill
+                      />
+                    );
+                  })}
                 </div>
-
-                {/* Helper text */}
-                <p style={{
-                  fontSize: '9px',
-                  color: '#444',
-                  margin: '6px 0 0 0',
-                  fontStyle: 'italic'
-                }}>
-                  Edit palette colors in left panel
-                </p>
               </div>
 
               <AlgorithmSelect value={layer.ditherType} onChange={(v) => onUpdate({ ...layer, ditherType: v })} />

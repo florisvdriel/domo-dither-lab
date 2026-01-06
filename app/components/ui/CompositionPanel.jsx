@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Button from './Button';
 import IconButton from './IconButton';
 import LayerItem from './LayerItem';
-import ColorPickerPopover from './ColorPickerPopover';
+
 
 // Simple non-collapsible section header
 function SectionHeader({ title }) {
@@ -273,111 +273,8 @@ export default function CompositionPanel({
           )}
         </div>
       </div>
-
-      {/* Palette Section - Fixed at bottom */}
-      <div style={{
-        flexShrink: 0,
-        borderTop: '1px solid #222',
-        backgroundColor: '#0a0a0a'
-      }}>
-        <SectionHeader title="PALETTE" />
-        <div style={{ padding: '0 16px 16px' }}>
-          {/* Helper text at the top */}
-          <p style={{
-            fontSize: '9px',
-            color: '#666',
-            margin: '12px 0 12px 0',
-            lineHeight: '1.4'
-          }}>
-            Define your 8-color palette here. Layer colors will use these colors.
-          </p>
-
-          {/* Color swatches in 4x2 grid filling full width */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(4, 1fr)',
-              gap: '8px',
-              marginBottom: '12px'
-            }}>
-            {colorKeys.map((key, idx) => {
-              const isUsed = usedColorKeys.has(key);
-              const isHovering = hoveringSwatchKey === key;
-              const swatchOpacity = (isUsed || isHovering) ? 1 : 0.5;
-
-              return (
-                <div
-                  key={key}
-                  style={{
-                    height: '32px',
-                    opacity: swatchOpacity,
-                    transition: 'opacity 0.2s ease',
-                    position: 'relative'
-                  }}
-                  onMouseEnter={() => setHoveringSwatchKey(key)}
-                  onMouseLeave={() => setHoveringSwatchKey(null)}
-                >
-                  <ColorPickerPopover
-                    key={key}
-                    color={palette[key]?.hex || '#000000'}
-                    onChange={(newHex) => onUpdatePaletteColor(key, newHex)}
-                    size="100%"
-                  />
-                </div>
-              );
-            })}
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
-            {presetNames.map((presetName) => (
-              <button
-                key={presetName}
-                onClick={() => onApplyPreset(presetName)}
-                style={{
-                  padding: '8px',
-                  backgroundColor: '#111',
-                  color: '#999',
-                  border: '1px solid #222',
-                  borderRadius: 0,
-                  cursor: 'pointer',
-                  fontSize: '9px',
-                  fontFamily: 'monospace',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                  transition: 'all 0.15s ease'
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.backgroundColor = '#1a1a1a';
-                  e.target.style.color = '#fff';
-                  e.target.style.borderColor = '#333';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.backgroundColor = '#111';
-                  e.target.style.color = '#999';
-                  e.target.style.borderColor = '#222';
-                }}
-              >
-                {presetName}
-              </button>
-            ))}
-          </div>
-
-          <Button onClick={onRandomizePalette}>
-            ↻ RANDOMIZE
-          </Button>
-
-          <p style={{
-            fontSize: '9px',
-            color: '#444',
-            margin: '8px 0 0 0',
-            textAlign: 'center',
-            fontStyle: 'italic'
-          }}>
-            Click swatches to edit colors
-          </p>
-        </div>
-      </div>
     </div>
+
   );
 }
 

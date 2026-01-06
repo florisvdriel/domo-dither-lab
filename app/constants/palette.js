@@ -1,18 +1,20 @@
-// Default Color Palette - 8 colors for up to 10 layers
-export const DEFAULT_PALETTE = {
-  coral: { name: 'Coral', hex: '#E86A58', rgb: [232, 106, 88] },
-  teal: { name: 'Teal', hex: '#4A9B8C', rgb: [74, 155, 140] },
-  gold: { name: 'Gold', hex: '#D4A84B', rgb: [212, 168, 75] },
-  navy: { name: 'Navy', hex: '#2D4A6F', rgb: [45, 74, 111] },
-  plum: { name: 'Plum', hex: '#8B5A8C', rgb: [139, 90, 140] },
-  olive: { name: 'Olive', hex: '#7A8B4A', rgb: [122, 139, 74] },
-  slate: { name: 'Slate', hex: '#5A6B7A', rgb: [90, 107, 122] },
-  peach: { name: 'Peach', hex: '#E8A07A', rgb: [232, 160, 122] },
-  white: { name: 'White', hex: '#FFFFFF', rgb: [255, 255, 255] },
+/**
+ * Domo Brand Palette
+ * Fixed colors for Domo Halftone Lab
+ */
+
+export const DOMO_PALETTE = {
+  blue: { name: 'Domo Blue', hex: '#0062FF', rgb: [0, 98, 255] },
+  darkRed: { name: 'Domo Dark Red', hex: '#430E0A', rgb: [67, 14, 10] },
+  red: { name: 'Domo Red', hex: '#E9280A', rgb: [233, 40, 10] },
+  green: { name: 'Domo Green', hex: '#11533B', rgb: [17, 83, 59] },
+  gold: { name: 'Domo Gold', hex: '#C7A95A', rgb: [199, 169, 90] },
   black: { name: 'Black', hex: '#000000', rgb: [0, 0, 0] },
+  white: { name: 'White', hex: '#FFFFFF', rgb: [255, 255, 255] }
 };
 
-// Color keys excluding black and white (for layers)
-export const COLOR_KEYS = ['coral', 'teal', 'gold', 'navy', 'plum', 'olive', 'slate', 'peach'];
+// Helper to get array of values if needed
+export const DOMO_COLORS = Object.values(DOMO_PALETTE);
 
-export const ALL_COLOR_KEYS = Object.keys(DEFAULT_PALETTE);
+// Export as DEFAULT_PALETTE for compatibility
+export const DEFAULT_PALETTE = DOMO_PALETTE;

@@ -2,8 +2,8 @@ import './globals.css';
 import { COLORS, FONTS } from './constants/design';
 
 export const metadata = {
-  title: 'Halftone Lab',
-  description: 'Generative dithering and halftone pattern tool',
+  title: 'Domo Halftone Lab',
+  description: 'Generative dithering and halftone pattern tool for Domo',
 };
 
 export default function RootLayout({ children }) {
