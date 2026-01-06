@@ -68,7 +68,13 @@ export default function HalftoneLab() {
     blendMode: 'multiply',
     opacity: 1,
     visible: true,
-    knockout: false
+    knockout: false,
+    invert: false,
+    gamma: 1,
+    noise: 0,
+    clampMin: 0,
+    clampMax: 1,
+    preBlur: 0
   }]);
 
   // UI and Viewport state

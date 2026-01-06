@@ -1516,14 +1516,11 @@ self.onmessage = function (e) {
       let result;
 
       // Call algorithm with appropriate parameters
-      if (algorithm.startsWith('halftone')) {
-        // Pass params object as the 6th argument for advanced controls (gridType, channel, etc)
-        result = algo(imageData, threshold, scale, angle, hardness, params);
-      } else if (algorithm === 'noise' || algorithm === 'organicStipple' || algorithm === 'blueNoise' || algorithm.startsWith('bayer') || algorithm === 'floydSteinberg' || algorithm === 'atkinson' || algorithm === 'stucki' || algorithm === 'sierra' || algorithm === 'sierraTwoRow' || algorithm === 'sierraLite' || algorithm === 'riemersma' || algorithm === 'modulation' || algorithm === 'circuit') {
+      if (algorithm === 'none') {
+        result = algo(imageData);
+      } else {
         // Pass all parameters including options for all algorithms with preprocessing support
         result = algo(imageData, threshold, scale, angle, hardness, params);
-      } else {
-        result = algo(imageData, threshold);
       }
 
       // Transfer the buffer back for efficiency

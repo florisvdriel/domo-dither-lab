@@ -33,6 +33,6 @@ export const DEFAULT_STATE = {
   viewportSize: { w: 1080, h: 1080 },
   imageTransform: { x: 0, y: 0, scale: 1 },
   layers: [
-    { id: 1, colorKey: 'blue', ditherType: 'floydSteinberg', threshold: 0.5, scale: 2, channel: 'gray', angle: 0, offsetX: 0, offsetY: 0, blendMode: 'multiply', opacity: 1, visible: true, knockout: false }
+    { id: 1, colorKey: 'blue', ditherType: 'floydSteinberg', threshold: 0.5, scale: 2, channel: 'gray', angle: 0, offsetX: 0, offsetY: 0, blendMode: 'multiply', opacity: 1, visible: true, knockout: false, invert: false, gamma: 1, noise: 0, clampMin: 0, clampMax: 1, preBlur: 0 }
   ]
 };
