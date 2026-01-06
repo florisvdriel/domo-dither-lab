@@ -2,7 +2,7 @@ import './globals.css';
 import { COLORS, FONTS } from './constants/design';
 
 export const metadata = {
-  title: 'Domo Halftone Lab',
+  title: 'Domo Dither Lab',
   description: 'Generative dithering and halftone pattern tool for Domo',
 };
 

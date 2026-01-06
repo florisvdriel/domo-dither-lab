@@ -1,4 +1,4 @@
-// Design system for Halftone Lab
+// Design system for Domo Dither Lab
 // "Screenprint Studio" aesthetic - dark workshop base with print ink accents
 
 export const COLORS = {
@@ -9,7 +9,7 @@ export const COLORS = {
     tertiary: '#1C1C1C',      // Panels/cards
     elevated: '#252525',      // Hover states
   },
-  
+
   // Screenprint ink colors (from palette)
   ink: {
     coral: '#F5F1E8',
@@ -19,7 +19,7 @@ export const COLORS = {
     gold: '#D4A84B',
     navy: '#2D4A6F',
   },
-  
+
   // Paper/cream tones for text
   text: {
     primary: '#F5F1E8',      // Cream (main text)
@@ -27,7 +27,7 @@ export const COLORS = {
     tertiary: '#6B6966',     // Hints/disabled
     inverse: '#0D0D0D',      // Text on light backgrounds
   },
-  
+
   // Border system
   border: {
     subtle: '#282828',

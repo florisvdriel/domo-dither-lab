@@ -1878,17 +1878,8 @@ export default function HalftoneLab() {
                 color: COLORS.text.primary,
                 fontFamily: FONTS.ui
               }}>
-                Halftone Lab
+                Domo Dither Lab
               </h1>
-              <p style={{
-                fontSize: '9px',
-                color: COLORS.text.tertiary,
-                margin: '2px 0 0 0',
-                letterSpacing: '0.05em',
-                fontFamily: FONTS.data
-              }}>
-                Professional Dithering
-              </p>
             </div>
           </div>
 
