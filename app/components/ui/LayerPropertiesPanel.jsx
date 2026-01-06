@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import { DITHER_ALGORITHMS } from '../../constants/ditherAlgorithms';
 import { BLEND_MODES } from '../../constants';
 import { COLORS, FONTS } from '../../constants/design';
@@ -277,29 +276,27 @@ export default function LayerPropertiesPanel({
             />
           </div>
 
-          {/* Clamp (Halftone only) */}
-          {isHalftone && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '16px' }}>
-              <Slider
-                label={`CLAMP ${Math.round((layer.clampMin || 0) * 100)}`}
-                value={layer.clampMin || 0}
-                min={0}
-                max={1}
-                step={0.05}
-                onChange={(v) => onUpdate({ ...layer, clampMin: v })}
-                debounceMs={50}
-              />
-              <Slider
-                label={`${Math.round((layer.clampMax ?? 1) * 100)}`}
-                value={layer.clampMax ?? 1}
-                min={0}
-                max={1}
-                step={0.05}
-                onChange={(v) => onUpdate({ ...layer, clampMax: v })}
-                debounceMs={50}
-              />
-            </div>
-          )}
+          {/* Clamp */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '16px' }}>
+            <Slider
+              label={`CLAMP ${Math.round((layer.clampMin || 0) * 100)}`}
+              value={layer.clampMin || 0}
+              min={0}
+              max={1}
+              step={0.05}
+              onChange={(v) => onUpdate({ ...layer, clampMin: v })}
+              debounceMs={50}
+            />
+            <Slider
+              label={`${Math.round((layer.clampMax ?? 1) * 100)}`}
+              value={layer.clampMax ?? 1}
+              min={0}
+              max={1}
+              step={0.05}
+              onChange={(v) => onUpdate({ ...layer, clampMax: v })}
+              debounceMs={50}
+            />
+          </div>
 
           {/* Blur */}
           <div style={{ marginBottom: '16px' }}>

@@ -1096,16 +1096,10 @@ export default function HalftoneLab() {
       // Per-layer adjustments
       brightness: layer.brightness,
       contrast: layer.contrast,
+      gamma: layer.gamma,
       invert: layer.invert,
       preBlur: layer.preBlur,
-      // New preprocessing
-      sharpen: layer.sharpen,
-      sharpenRadius: layer.sharpenRadius,
-      denoise: layer.denoise,
       noise: layer.noise,
-      shadows: layer.shadows,
-      midtones: layer.midtones,
-      highlights: layer.highlights,
       // Organic stipple
       jitter: layer.jitter
     };
