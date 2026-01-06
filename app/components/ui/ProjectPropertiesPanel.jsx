@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { PRESETS } from '../../constants/presets';
+import { PRESETS } from '../../constants/presets/index';
 import { EXPORT_RESOLUTIONS } from '../../constants';
 import Button from './Button';
 import Slider from './CustomSlider';
@@ -319,8 +319,8 @@ export default function ProjectPropertiesPanel({
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
-            gap: '6px',
+            gridTemplateColumns: 'repeat(5, 1fr)',
+            gap: '4px',
             marginBottom: '6px'
           }}>
           {colorKeys.map((key) => (

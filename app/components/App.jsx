@@ -6,7 +6,7 @@ import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMe
 import { DOMO_PALETTE } from '../constants/palette';
 import { DEFAULT_PALETTE } from '../constants/palette';
 import { DITHER_ALGORITHMS } from '../constants/ditherAlgorithms';
-import { PRESETS } from '../constants/presets';
+import { PRESETS } from '../constants/presets/index';
 import { BLEND_MODES, EXPORT_RESOLUTIONS, PREVIEW_MAX_WIDTH, DEFAULT_STATE } from '../constants';
 import { COLORS, FONTS, TRANSITIONS } from '../constants/design';
 

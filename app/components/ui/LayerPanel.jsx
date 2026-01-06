@@ -69,7 +69,11 @@ export default function LayerPanel({ layer, index, totalLayers, onUpdate, onRemo
                 <label style={{ display: 'block', color: '#666', fontSize: '10px', marginBottom: '8px', fontFamily: 'monospace', letterSpacing: '0.05em' }}>
                   COLOR
                 </label>
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(5, 1fr)',
+                  gap: '4px'
+                }}>
                   {/* Fixed list of Domo colors to choose from */}
                   {['blue', 'darkRed', 'red', 'green', 'gold'].map((key) => {
                     const color = activePalette[key];
@@ -80,8 +84,8 @@ export default function LayerPanel({ layer, index, totalLayers, onUpdate, onRemo
                         color={color.hex}
                         selected={layer.colorKey === key}
                         onClick={() => onUpdate({ ...layer, colorKey: key })}
-                        size={32} // Large touch-friendly targets
-                        style={{ flex: 1, height: '32px' }} // Stretch to fill
+                        size="100%"
+                        style={{ aspectRatio: '1/1' }}
                       />
                     );
                   })}

@@ -129,7 +129,7 @@ export default function LayerPropertiesPanel({
             }}>
               COLOR
             </label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '4px' }}>
               {colorKeys.map((key) => {
                 const color = palette[key];
                 if (!color) return null;
@@ -140,7 +140,7 @@ export default function LayerPropertiesPanel({
                     selected={layer.colorKey === key}
                     onClick={() => onUpdate({ ...layer, colorKey: key })}
                     size="100%"
-                    style={{ height: '32px' }}
+                    style={{ aspectRatio: '1/1' }}
                   />
                 );
               })}
