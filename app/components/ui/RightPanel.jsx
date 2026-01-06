@@ -105,6 +105,7 @@ export default function RightPanel({
             canRemove={totalLayers > 1}
             palette={activePalette}
             colorKeys={colorKeys}
+            onExport={onExportPNG}
           />
         ) : null;
       case 'background':

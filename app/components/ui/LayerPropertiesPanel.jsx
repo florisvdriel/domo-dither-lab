@@ -1,14 +1,15 @@
 'use client';
 
-import { useRef, useState, useEffect } from 'react';
+import { useState } from 'react';
 import { DITHER_ALGORITHMS } from '../../constants/ditherAlgorithms';
 import { BLEND_MODES } from '../../constants';
+import { COLORS, FONTS } from '../../constants/design';
 import { ColorSwatch } from './ColorPicker';
 import AlgorithmSelect from './AlgorithmSelect';
 import Slider from './CustomSlider';
 import Button from './Button';
-import { Accordion, AccordionSection } from './Accordion';
 import CustomSelect from './CustomSelect';
+import Toggle from './Toggle';
 
 export default function LayerPropertiesPanel({
   layer,
@@ -19,559 +20,127 @@ export default function LayerPropertiesPanel({
   onDuplicate,
   canRemove,
   palette,
-  colorKeys
+  colorKeys,
+  onExport
 }) {
   const algoInfo = DITHER_ALGORITHMS[layer.ditherType];
   const isHalftone = algoInfo?.category === 'halftone';
-  const isDitherOrOrganic = algoInfo?.category === 'ordered' || algoInfo?.category === 'diffusion' || algoInfo?.category === 'other';
-
-  // Per-layer accordion persistence
-  const openByLayerIdRef = useRef(new Map());
-  const [openSectionId, setOpenSectionId] = useState('layer-settings');
-
-  // Restore open section when layer changes
-  useEffect(() => {
-    const saved = openByLayerIdRef.current.get(layer.id);
-    if (saved) {
-      // Check if saved section exists for current algorithm category
-      const validSections = ['layer-settings', 'extra-actions', 'image-adjustments', 'image-effects', 'offset', 'blending', 'actions'];
-      if (isHalftone) {
-        validSections.push('grid-settings', 'pattern-settings');
-      }
-      setOpenSectionId(validSections.includes(saved) ? saved : 'layer-settings');
-    } else {
-      setOpenSectionId('layer-settings');
-    }
-  }, [layer.id, isHalftone]);
-
-  const handleSectionChange = (sectionId) => {
-    setOpenSectionId(sectionId);
-    openByLayerIdRef.current.set(layer.id, sectionId);
-  };
-
-  // Helper: Channel selector (shared across all patterns)
-  const renderChannelSelector = () => (
-    <div>
-      <label style={{
-        display: 'block',
-        color: '#666',
-        fontSize: '9px',
-        marginBottom: '6px',
-        fontFamily: 'monospace',
-        letterSpacing: '0.05em'
-      }}>
-        CHANNEL
-      </label>
-      <CustomSelect
-        value={layer.channel || 'gray'}
-        onChange={(value) => onUpdate({ ...layer, channel: value })}
-        options={[
-          { value: 'gray', label: 'GRAYSCALE' },
-          { value: 'red', label: 'RED' },
-          { value: 'green', label: 'GREEN' },
-          { value: 'blue', label: 'BLUE' },
-          { value: 'cyan', label: 'CYAN' },
-          { value: 'magenta', label: 'MAGENTA' },
-          { value: 'yellow', label: 'YELLOW' },
-          { value: 'black', label: 'BLACK (K)' },
-        ]}
-      />
-    </div>
-  );
-
-  // Helper: Toggle button
-  const ToggleButton = ({ active, onClick, children }) => {
-    const [hovering, setHovering] = useState(false);
-    return (
-      <button
-        onClick={onClick}
-        onMouseEnter={() => setHovering(true)}
-        onMouseLeave={() => setHovering(false)}
-        aria-pressed={active}
-        style={{
-          width: '100%',
-          padding: '8px',
-          backgroundColor: active ? '#fff' : (hovering ? '#111' : '#000'),
-          color: active ? '#000' : '#fff',
-          border: '1px solid #333',
-          fontSize: '9px',
-          fontFamily: 'monospace',
-          cursor: 'pointer',
-          letterSpacing: '0.05em',
-          transition: 'all 0.15s ease'
-        }}
-      >
-        {children}
-      </button>
-    );
-  };
 
   return (
-    <div>
-      <Accordion value={openSectionId} onChange={handleSectionChange}>
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%',
+      overflow: 'hidden'
+    }}>
+      {/* Scrollable Content */}
+      <div style={{
+        flex: 1,
+        overflowY: 'auto',
+        overflowX: 'hidden',
+        padding: '16px'
+      }}>
+        {/* Header */}
+        <div style={{
+          marginBottom: '20px',
+          paddingBottom: '12px',
+          borderBottom: `1px solid ${COLORS.border.default}`
+        }}>
+          <h3 style={{
+            fontSize: '10px',
+            fontFamily: FONTS.ui,
+            fontWeight: 600,
+            letterSpacing: '0.05em',
+            color: COLORS.text.secondary,
+            margin: 0
+          }}>
+            LAYER SETTINGS
+          </h3>
+        </div>
 
-        {/* 1. LAYER SETTINGS */}
-        <AccordionSection
-          id="layer-settings"
-          title="LAYER SETTINGS"
-          isOpen={openSectionId === 'layer-settings'}
-          onToggle={() => handleSectionChange('layer-settings')}
-        >
-          {/* Color */}
-          <div style={{ marginBottom: '16px' }}>
-            <label style={{
-              display: 'block',
-              color: '#666',
-              fontSize: '10px',
-              marginBottom: '8px',
-              fontFamily: 'monospace',
-              letterSpacing: '0.05em'
-            }}>
-              COLOR
-            </label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '4px' }}>
-              {colorKeys.map((key) => {
-                const color = palette[key];
-                if (!color) return null;
-                return (
-                  <ColorSwatch
-                    key={key}
-                    color={color.hex}
-                    selected={layer.colorKey === key}
-                    onClick={() => onUpdate({ ...layer, colorKey: key })}
-                    size="100%"
-                    style={{ aspectRatio: '1/1' }}
-                  />
-                );
-              })}
-            </div>
+        {/* Color */}
+        <div style={{ marginBottom: '16px' }}>
+          <label style={{
+            display: 'block',
+            color: COLORS.text.tertiary,
+            fontSize: '9px',
+            marginBottom: '8px',
+            fontFamily: 'monospace',
+            letterSpacing: '0.05em'
+          }}>
+            COLOR
+          </label>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '4px' }}>
+            {colorKeys.map((key) => {
+              const color = palette[key];
+              if (!color) return null;
+              return (
+                <ColorSwatch
+                  key={key}
+                  color={color.hex}
+                  selected={layer.colorKey === key}
+                  onClick={() => onUpdate({ ...layer, colorKey: key })}
+                  size="100%"
+                  style={{ aspectRatio: '1/1' }}
+                />
+              );
+            })}
           </div>
+        </div>
 
-          {/* Pattern */}
+        {/* Pattern */}
+        <div style={{ marginBottom: '16px' }}>
           <AlgorithmSelect
             value={layer.ditherType}
             onChange={(v) => onUpdate({ ...layer, ditherType: v })}
           />
+        </div>
 
-          {/* Density */}
-          <Slider
-            label={`DENSITY ${Math.round(layer.threshold * 100)}%`}
-            value={layer.threshold}
-            min={0}
-            max={1}
-            step={0.01}
-            onChange={(v) => onUpdate({ ...layer, threshold: v })}
-            debounceMs={50}
-          />
-
-          {/* Channel */}
-          {(isDitherOrOrganic || isHalftone) && (
-            <div style={{ marginTop: '16px' }}>
-              {renderChannelSelector()}
-            </div>
-          )}
-
-          {/* Size (for dither patterns and noise) */}
-          {algoInfo?.hasScale && !isHalftone && (
-            <div style={{ marginTop: '16px' }}>
-              <Slider
-                label={`SIZE ${layer.scale}px`}
-                value={layer.scale}
-                min={1}
-                max={64}
-                step={1}
-                onChange={(v) => onUpdate({ ...layer, scale: v })}
-                debounceMs={50}
-              />
-            </div>
-          )}
-
-          {/* Jitter (for organic stipple) */}
-          {layer.ditherType === 'organicStipple' && (
-            <div style={{ marginTop: '16px' }}>
-              <Slider
-                label={`JITTER ${Math.round((layer.jitter ?? 0.5) * 100)}%`}
-                value={layer.jitter ?? 0.5}
-                min={0}
-                max={1}
-                step={0.01}
-                onChange={(v) => onUpdate({ ...layer, jitter: v })}
-                debounceMs={50}
-              />
-            </div>
-          )}
-        </AccordionSection>
-
-        {/* 2. EXTRA ACTIONS */}
-        <AccordionSection
-          id="extra-actions"
-          title="EXTRA ACTIONS"
-          isOpen={openSectionId === 'extra-actions'}
-          onToggle={() => handleSectionChange('extra-actions')}
-        >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {/* Knockout */}
-            <div>
-              <label style={{
-                display: 'block',
-                color: '#666',
-                fontSize: '9px',
-                marginBottom: '6px',
-                fontFamily: 'monospace',
-                letterSpacing: '0.05em'
-              }}>
-                KNOCKOUT
-              </label>
-              <ToggleButton
-                active={layer.knockout}
-                onClick={() => onUpdate({ ...layer, knockout: !layer.knockout })}
-              >
-                {layer.knockout ? 'KNOCKOUT ON' : 'KNOCKOUT OFF'}
-              </ToggleButton>
-              <p style={{
-                fontSize: '9px',
-                color: '#444',
-                margin: '6px 0 0 0'
-              }}>
-                Punches through inks below to the background where this layer prints.
-              </p>
-            </div>
-
-            {/* Invert */}
-            <div>
-              <label style={{
-                display: 'block',
-                color: '#666',
-                fontSize: '9px',
-                marginBottom: '6px',
-                fontFamily: 'monospace',
-                letterSpacing: '0.05em'
-              }}>
-                INVERT IMAGE
-              </label>
-              <ToggleButton
-                active={layer.invert}
-                onClick={() => onUpdate({ ...layer, invert: !layer.invert })}
-              >
-                {layer.invert ? 'INVERTED' : 'NORMAL'}
-              </ToggleButton>
-            </div>
-          </div>
-        </AccordionSection>
-
-        {/* 3. GRID SETTINGS (Halftone only) */}
-        {isHalftone && (
-          <AccordionSection
-            id="grid-settings"
-            title="GRID SETTINGS"
-            isOpen={openSectionId === 'grid-settings'}
-            onToggle={() => handleSectionChange('grid-settings')}
-          >
-            {/* Grid Type */}
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{
-                display: 'block',
-                color: '#666',
-                fontSize: '10px',
-                marginBottom: '8px',
-                fontFamily: 'monospace',
-                letterSpacing: '0.05em'
-              }}>
-                GRID KIND
-              </label>
-              <CustomSelect
-                value={layer.gridType || 'square'}
-                onChange={(value) => onUpdate({ ...layer, gridType: value })}
-                options={[
-                  { value: 'square', label: 'SQUARE' },
-                  { value: 'hex', label: 'HEXAGONAL' },
-                  { value: 'radial', label: 'RADIAL' }
-                ]}
-              />
-            </div>
-
-            {/* Size */}
+        {/* Size */}
+        {(algoInfo?.hasScale || isHalftone) && (
+          <div style={{ marginBottom: '16px' }}>
             <Slider
               label={`SIZE ${layer.scale}px`}
               value={layer.scale}
-              min={2}
+              min={isHalftone ? 2 : 1}
               max={64}
               step={1}
               onChange={(v) => onUpdate({ ...layer, scale: v })}
               debounceMs={50}
             />
-
-            {/* Rotation */}
-            <Slider
-              label={`ROTATION ${layer.angle}°`}
-              value={layer.angle}
-              min={0}
-              max={180}
-              step={1}
-              onChange={(v) => onUpdate({ ...layer, angle: v })}
-              debounceMs={50}
-            />
-          </AccordionSection>
+          </div>
         )}
 
-        {/* 4. PATTERN SETTINGS (Halftone only) */}
-        {isHalftone && (
-          <AccordionSection
-            id="pattern-settings"
-            title="PATTERN SETTINGS"
-            isOpen={openSectionId === 'pattern-settings'}
-            onToggle={() => handleSectionChange('pattern-settings')}
-          >
-            <Slider
-              label={`SCALE MIN ${Math.round((layer.dotScaleMin ?? 0.1) * 100)}%`}
-              value={layer.dotScaleMin ?? 0.1}
-              min={0}
-              max={1}
-              step={0.05}
-              onChange={(v) => onUpdate({ ...layer, dotScaleMin: v })}
-              debounceMs={50}
-            />
-            <Slider
-              label={`SCALE MAX ${Math.round((layer.dotScaleMax ?? 1) * 100)}%`}
-              value={layer.dotScaleMax ?? 1}
-              min={0}
-              max={2}
-              step={0.05}
-              onChange={(v) => onUpdate({ ...layer, dotScaleMax: v })}
-              debounceMs={50}
-            />
-            <Slider
-              label={`HARDNESS ${Math.round((layer.hardness ?? 1) * 100)}%`}
-              value={layer.hardness ?? 1}
-              min={0}
-              max={1}
-              step={0.05}
-              onChange={(v) => onUpdate({ ...layer, hardness: v })}
-              debounceMs={50}
-            />
-          </AccordionSection>
-        )}
-
-        {/* 5. IMAGE ADJUSTMENTS */}
-        <AccordionSection
-          id="image-adjustments"
-          title="IMAGE ADJUSTMENTS"
-          isOpen={openSectionId === 'image-adjustments'}
-          onToggle={() => handleSectionChange('image-adjustments')}
-        >
-          {/* Brightness & Contrast */}
-          <Slider
-            label={`BRIGHTNESS ${layer.brightness > 0 ? '+' : ''}${layer.brightness || 0}`}
-            value={layer.brightness || 0}
-            min={-100}
-            max={100}
-            step={1}
-            onChange={(v) => onUpdate({ ...layer, brightness: v })}
-            debounceMs={50}
-          />
-          <Slider
-            label={`CONTRAST ${layer.contrast > 0 ? '+' : ''}${layer.contrast || 0}`}
-            value={layer.contrast || 0}
-            min={-100}
-            max={100}
-            step={1}
-            onChange={(v) => onUpdate({ ...layer, contrast: v })}
-            debounceMs={50}
-          />
-
-          {/* Tone Adjustments */}
-          {(isDitherOrOrganic || isHalftone) && (
-            <>
-              <div style={{ borderTop: '1px solid #222', margin: '12px 0', paddingTop: '12px' }}>
-                <Slider
-                  label={`SHADOWS ${layer.shadows > 0 ? '+' : ''}${Math.round((layer.shadows || 0) * 100)}`}
-                  value={layer.shadows || 0}
-                  min={-1}
-                  max={1}
-                  step={0.05}
-                  onChange={(v) => onUpdate({ ...layer, shadows: v })}
-                  debounceMs={150}
-                />
-                <Slider
-                  label={`MIDTONES ${layer.midtones > 0 ? '+' : ''}${Math.round((layer.midtones || 0) * 100)}`}
-                  value={layer.midtones || 0}
-                  min={-1}
-                  max={1}
-                  step={0.05}
-                  onChange={(v) => onUpdate({ ...layer, midtones: v })}
-                  debounceMs={150}
-                />
-                <Slider
-                  label={`HIGHLIGHTS ${layer.highlights > 0 ? '+' : ''}${Math.round((layer.highlights || 0) * 100)}`}
-                  value={layer.highlights || 0}
-                  min={-1}
-                  max={1}
-                  step={0.05}
-                  onChange={(v) => onUpdate({ ...layer, highlights: v })}
-                  debounceMs={150}
-                />
-              </div>
-            </>
-          )}
-
-          {/* Clamp (Halftone only) */}
-          {isHalftone && (
-            <div style={{ borderTop: '1px solid #222', margin: '12px 0', paddingTop: '12px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                <Slider
-                  label={`CLAMP LO ${Math.round((layer.clampMin || 0) * 100)}`}
-                  value={layer.clampMin || 0}
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  onChange={(v) => onUpdate({ ...layer, clampMin: v })}
-                  debounceMs={50}
-                />
-                <Slider
-                  label={`CLAMP HI ${Math.round((layer.clampMax ?? 1) * 100)}`}
-                  value={layer.clampMax ?? 1}
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  onChange={(v) => onUpdate({ ...layer, clampMax: v })}
-                  debounceMs={50}
-                />
-              </div>
-            </div>
-          )}
-        </AccordionSection>
-
-        {/* 6. IMAGE EFFECTS */}
-        <AccordionSection
-          id="image-effects"
-          title="IMAGE EFFECTS"
-          isOpen={openSectionId === 'image-effects'}
-          onToggle={() => handleSectionChange('image-effects')}
-        >
-          {/* Sharpen */}
-          {(isDitherOrOrganic || isHalftone) && (
-            <>
-              <Slider
-                label={`SHARPEN ${layer.sharpen || 0}`}
-                value={layer.sharpen || 0}
-                min={0}
-                max={10}
-                step={0.5}
-                onChange={(v) => onUpdate({ ...layer, sharpen: v })}
-                debounceMs={150}
-              />
-              <Slider
-                label={`SHARPEN RADIUS ${layer.sharpenRadius || 1}px`}
-                value={layer.sharpenRadius || 1}
-                min={1}
-                max={20}
-                step={1}
-                onChange={(v) => onUpdate({ ...layer, sharpenRadius: v })}
-                debounceMs={150}
-              />
-            </>
-          )}
-
-          {/* Blur */}
-          {(isDitherOrOrganic || isHalftone) && (
-            <Slider
-              label={`BLUR ${layer.preBlur || 0}px`}
-              value={layer.preBlur || 0}
-              min={0}
-              max={20}
-              step={1}
-              onChange={(v) => onUpdate({ ...layer, preBlur: v })}
-              debounceMs={150}
-            />
-          )}
-
-          {/* Noise */}
-          {(isDitherOrOrganic || isHalftone) && (
-            <Slider
-              label={`NOISE ${Math.round((layer.noise || 0) * 100)}%`}
-              value={layer.noise || 0}
-              min={0}
-              max={1}
-              step={0.05}
-              onChange={(v) => onUpdate({ ...layer, noise: v })}
-              debounceMs={150}
-            />
-          )}
-
-          {/* Denoise */}
-          {(isDitherOrOrganic || isHalftone) && (
-            <Slider
-              label={`DENOISE ${Math.round((layer.denoise || 0) * 100)}%`}
-              value={layer.denoise || 0}
-              min={0}
-              max={1}
-              step={0.05}
-              onChange={(v) => onUpdate({ ...layer, denoise: v })}
-              debounceMs={150}
-            />
-          )}
-        </AccordionSection>
-
-        {/* 7. OFFSET */}
-        <AccordionSection
-          id="offset"
-          title="OFFSET"
-          isOpen={openSectionId === 'offset'}
-          onToggle={() => handleSectionChange('offset')}
-        >
-          <p style={{
+        {/* Channel */}
+        <div style={{ marginBottom: '16px' }}>
+          <label style={{
+            display: 'block',
+            color: COLORS.text.tertiary,
             fontSize: '9px',
-            color: '#444',
-            margin: '0 0 12px 0'
+            marginBottom: '6px',
+            fontFamily: 'monospace',
+            letterSpacing: '0.05em'
           }}>
-            Misregistration effect
-          </p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-            <Slider
-              label={`X ${layer.offsetX}px`}
-              value={layer.offsetX}
-              min={-50}
-              max={50}
-              step={1}
-              onChange={(v) => onUpdate({ ...layer, offsetX: v })}
-              debounceMs={30}
-            />
-            <Slider
-              label={`Y ${layer.offsetY}px`}
-              value={layer.offsetY}
-              min={-50}
-              max={50}
-              step={1}
-              onChange={(v) => onUpdate({ ...layer, offsetY: v })}
-              debounceMs={30}
-            />
-          </div>
-        </AccordionSection>
+            CHANNEL
+          </label>
+          <CustomSelect
+            value={layer.channel || 'gray'}
+            onChange={(value) => onUpdate({ ...layer, channel: value })}
+            options={[
+              { value: 'gray', label: 'Greyscale' },
+              { value: 'red', label: 'Red' },
+              { value: 'green', label: 'Green' },
+              { value: 'blue', label: 'Blue' },
+              { value: 'cyan', label: 'Cyan' },
+              { value: 'magenta', label: 'Magenta' },
+              { value: 'yellow', label: 'Yellow' },
+              { value: 'black', label: 'Black (K)' },
+            ]}
+          />
+        </div>
 
-        {/* 8. BLENDING */}
-        <AccordionSection
-          id="blending"
-          title="BLENDING"
-          isOpen={openSectionId === 'blending'}
-          onToggle={() => handleSectionChange('blending')}
-        >
-          <div style={{ marginBottom: '16px' }}>
-            <label style={{
-              display: 'block',
-              color: '#666',
-              fontSize: '10px',
-              marginBottom: '8px',
-              fontFamily: 'monospace'
-            }}>
-              BLEND MODE
-            </label>
-            <CustomSelect
-              value={layer.blendMode}
-              onChange={(value) => onUpdate({ ...layer, blendMode: value })}
-              options={Object.entries(BLEND_MODES).map(([k, v]) => ({ value: k, label: v }))}
-            />
-          </div>
-
+        {/* Opacity */}
+        <div style={{ marginBottom: '16px' }}>
           <Slider
             label={`OPACITY ${Math.round(layer.opacity * 100)}%`}
             value={layer.opacity}
@@ -581,28 +150,189 @@ export default function LayerPropertiesPanel({
             onChange={(v) => onUpdate({ ...layer, opacity: v })}
             debounceMs={30}
           />
-        </AccordionSection>
+        </div>
 
-        {/* 9. ACTIONS */}
-        <AccordionSection
-          id="actions"
-          title="ACTIONS"
-          isOpen={openSectionId === 'actions'}
-          onToggle={() => handleSectionChange('actions')}
-        >
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <Button onClick={onDuplicate} style={{ flex: 1, fontSize: '9px' }}>
-              DUPLICATE
-            </Button>
-            {canRemove && (
-              <Button onClick={onRemove} style={{ flex: 1, fontSize: '9px', color: '#ff6b6b' }}>
-                DELETE
-              </Button>
-            )}
+        {/* Blend Mode */}
+        <div style={{ marginBottom: '16px' }}>
+          <label style={{
+            display: 'block',
+            color: COLORS.text.tertiary,
+            fontSize: '9px',
+            marginBottom: '6px',
+            fontFamily: 'monospace',
+            letterSpacing: '0.05em'
+          }}>
+            BLEND MODE
+          </label>
+          <CustomSelect
+            value={layer.blendMode}
+            onChange={(value) => onUpdate({ ...layer, blendMode: value })}
+            options={Object.entries(BLEND_MODES).map(([k, v]) => ({ value: k, label: v }))}
+          />
+        </div>
+
+        {/* Knockout Toggle */}
+        <div style={{ marginBottom: '16px' }}>
+          <label style={{
+            display: 'block',
+            color: COLORS.text.tertiary,
+            fontSize: '9px',
+            marginBottom: '6px',
+            fontFamily: 'monospace',
+            letterSpacing: '0.05em'
+          }}>
+            KNOCKOUT
+          </label>
+          <Toggle
+            checked={layer.knockout || false}
+            onChange={(checked) => onUpdate({ ...layer, knockout: checked })}
+          />
+        </div>
+
+        {/* Invert Toggle */}
+        <div style={{ marginBottom: '16px' }}>
+          <label style={{
+            display: 'block',
+            color: COLORS.text.tertiary,
+            fontSize: '9px',
+            marginBottom: '6px',
+            fontFamily: 'monospace',
+            letterSpacing: '0.05em'
+          }}>
+            INVERT
+          </label>
+          <Toggle
+            checked={layer.invert || false}
+            onChange={(checked) => onUpdate({ ...layer, invert: checked })}
+          />
+        </div>
+
+        {/* Adjustments Section */}
+        <div style={{
+          marginTop: '24px',
+          marginBottom: '16px',
+          paddingTop: '16px',
+          borderTop: `1px solid ${COLORS.border.default}`
+        }}>
+          <h3 style={{
+            fontSize: '10px',
+            fontFamily: FONTS.ui,
+            fontWeight: 600,
+            letterSpacing: '0.05em',
+            color: COLORS.text.secondary,
+            margin: '0 0 16px 0'
+          }}>
+            ADJUSTMENTS
+          </h3>
+
+          {/* Gamma */}
+          <div style={{ marginBottom: '16px' }}>
+            <Slider
+              label={`GAMMA ${(layer.gamma === undefined ? 1 : layer.gamma).toFixed(2)}`}
+              value={layer.gamma === undefined ? 1 : layer.gamma}
+              min={0.1}
+              max={3}
+              step={0.05}
+              onChange={(v) => onUpdate({ ...layer, gamma: v })}
+              debounceMs={50}
+            />
           </div>
-        </AccordionSection>
 
-      </Accordion>
+          {/* Brightness */}
+          <div style={{ marginBottom: '16px' }}>
+            <Slider
+              label={`BRIGHTNESS ${layer.brightness > 0 ? '+' : ''}${layer.brightness || 0}`}
+              value={layer.brightness || 0}
+              min={-100}
+              max={100}
+              step={1}
+              onChange={(v) => onUpdate({ ...layer, brightness: v })}
+              debounceMs={50}
+            />
+          </div>
+
+          {/* Contrast */}
+          <div style={{ marginBottom: '16px' }}>
+            <Slider
+              label={`CONTRAST ${layer.contrast > 0 ? '+' : ''}${layer.contrast || 0}`}
+              value={layer.contrast || 0}
+              min={-100}
+              max={100}
+              step={1}
+              onChange={(v) => onUpdate({ ...layer, contrast: v })}
+              debounceMs={50}
+            />
+          </div>
+
+          {/* Noise */}
+          <div style={{ marginBottom: '16px' }}>
+            <Slider
+              label={`NOISE ${Math.round((layer.noise || 0) * 100)}`}
+              value={layer.noise || 0}
+              min={0}
+              max={1}
+              step={0.05}
+              onChange={(v) => onUpdate({ ...layer, noise: v })}
+              debounceMs={150}
+            />
+          </div>
+
+          {/* Clamp (Halftone only) */}
+          {isHalftone && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '16px' }}>
+              <Slider
+                label={`CLAMP ${Math.round((layer.clampMin || 0) * 100)}`}
+                value={layer.clampMin || 0}
+                min={0}
+                max={1}
+                step={0.05}
+                onChange={(v) => onUpdate({ ...layer, clampMin: v })}
+                debounceMs={50}
+              />
+              <Slider
+                label={`${Math.round((layer.clampMax ?? 1) * 100)}`}
+                value={layer.clampMax ?? 1}
+                min={0}
+                max={1}
+                step={0.05}
+                onChange={(v) => onUpdate({ ...layer, clampMax: v })}
+                debounceMs={50}
+              />
+            </div>
+          )}
+
+          {/* Blur */}
+          <div style={{ marginBottom: '16px' }}>
+            <Slider
+              label={`BLUR ${layer.preBlur || 0}px`}
+              value={layer.preBlur || 0}
+              min={0}
+              max={20}
+              step={1}
+              onChange={(v) => onUpdate({ ...layer, preBlur: v })}
+              debounceMs={150}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Fixed Export Button */}
+      <div style={{
+        padding: '16px',
+        borderTop: `1px solid ${COLORS.border.default}`,
+        backgroundColor: COLORS.bg.secondary
+      }}>
+        <Button
+          onClick={onExport}
+          style={{
+            width: '100%',
+            fontSize: '9px',
+            padding: '12px'
+          }}
+        >
+          EXPORT
+        </Button>
+      </div>
     </div>
   );
 }

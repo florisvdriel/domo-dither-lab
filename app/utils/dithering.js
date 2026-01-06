@@ -163,14 +163,8 @@ function preprocess(imageData, w, h, options) {
     invert = false,
     clampMin = 0,
     clampMax = 1,
-    // New properties for ordered/diffusion
-    sharpen = 0,
-    sharpenRadius = 1,
-    denoise = 0,
-    noise = 0,
-    shadows = 0,
-    midtones = 0,
-    highlights = 0
+    gamma = 1,
+    noise = 0
   } = options;
 
   const len = w * h;
@@ -198,21 +192,17 @@ function preprocess(imageData, w, h, options) {
     output[i] = darkness;
   }
 
-  // Apply filters in order: blur -> sharpen -> denoise -> tone adjustments -> brightness/contrast -> noise
+  // Apply filters in order: blur -> gamma -> brightness/contrast -> noise
   if (preBlur > 0) {
     boxBlur(output, w, h, preBlur);
   }
 
-  if (sharpen > 0) {
-    sharpenFilter(output, w, h, sharpen, sharpenRadius);
-  }
-
-  if (denoise > 0) {
-    denoiseFilter(output, w, h, denoise);
-  }
-
-  if (shadows !== 0 || midtones !== 0 || highlights !== 0) {
-    adjustTones(output, shadows, midtones, highlights);
+  // Apply gamma correction
+  if (gamma !== 1) {
+    const invGamma = 1 / gamma;
+    for (let i = 0; i < len; i++) {
+      output[i] = Math.pow(output[i], invGamma);
+    }
   }
 
   // Apply global brightness and contrast on normalized darkness values (0-1 range)

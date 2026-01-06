@@ -481,12 +481,14 @@ export default function HalftoneLab() {
     visible: true,
     brightness: 0,
     contrast: 0,
+    gamma: 1,
     hardness: 1,
     gridType: 'square',
     channel: 'gray',
     clampMin: 0,
     clampMax: 1,
     preBlur: 0,
+    noise: 0,
     dotScaleMin: 0.1,
     dotScaleMax: 1,
     knockout: false
@@ -1283,15 +1285,9 @@ export default function HalftoneLab() {
             dotScaleMax: layer.dotScaleMax === undefined ? 1 : layer.dotScaleMax,
             brightness: layer.brightness || 0,
             contrast: layer.contrast || 0,
+            gamma: layer.gamma === undefined ? 1 : layer.gamma,
             invert: layer.invert || false,
-            // New preprocessing properties
-            sharpen: layer.sharpen || 0,
-            sharpenRadius: layer.sharpenRadius || 1,
-            denoise: layer.denoise || 0,
             noise: layer.noise || 0,
-            shadows: layer.shadows || 0,
-            midtones: layer.midtones || 0,
-            highlights: layer.highlights || 0,
             // Organic stipple
             jitter: layer.jitter ?? 0.5
           }).then(result => {
@@ -1324,15 +1320,9 @@ export default function HalftoneLab() {
             dotScaleMax: layer.dotScaleMax === undefined ? 1 : layer.dotScaleMax,
             brightness: layer.brightness || 0,
             contrast: layer.contrast || 0,
+            gamma: layer.gamma === undefined ? 1 : layer.gamma,
             invert: layer.invert || false,
-            // New preprocessing properties
-            sharpen: layer.sharpen || 0,
-            sharpenRadius: layer.sharpenRadius || 1,
-            denoise: layer.denoise || 0,
             noise: layer.noise || 0,
-            shadows: layer.shadows || 0,
-            midtones: layer.midtones || 0,
-            highlights: layer.highlights || 0,
             // Organic stipple
             jitter: layer.jitter ?? 0.5
           };
