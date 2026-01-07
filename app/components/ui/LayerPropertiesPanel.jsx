@@ -170,40 +170,41 @@ export default function LayerPropertiesPanel({
           />
         </div>
 
-        {/* Knockout Toggle */}
-        <div style={{ marginBottom: '16px' }}>
-          <label style={{
-            display: 'block',
-            color: COLORS.text.tertiary,
-            fontSize: '9px',
-            marginBottom: '6px',
-            fontFamily: 'monospace',
-            letterSpacing: '0.05em'
-          }}>
-            KNOCKOUT
-          </label>
-          <Toggle
-            checked={layer.knockout || false}
-            onChange={(checked) => onUpdate({ ...layer, knockout: checked })}
-          />
-        </div>
+        {/* Knockout and Invert Toggles - Side by Side */}
+        <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
+          <div style={{ flex: 1 }}>
+            <label style={{
+              display: 'block',
+              color: COLORS.text.tertiary,
+              fontSize: '9px',
+              marginBottom: '6px',
+              fontFamily: 'monospace',
+              letterSpacing: '0.05em'
+            }}>
+              KNOCKOUT
+            </label>
+            <Toggle
+              checked={layer.knockout || false}
+              onChange={(checked) => onUpdate({ ...layer, knockout: checked })}
+            />
+          </div>
 
-        {/* Invert Toggle */}
-        <div style={{ marginBottom: '16px' }}>
-          <label style={{
-            display: 'block',
-            color: COLORS.text.tertiary,
-            fontSize: '9px',
-            marginBottom: '6px',
-            fontFamily: 'monospace',
-            letterSpacing: '0.05em'
-          }}>
-            INVERT
-          </label>
-          <Toggle
-            checked={layer.invert || false}
-            onChange={(checked) => onUpdate({ ...layer, invert: checked })}
-          />
+          <div style={{ flex: 1 }}>
+            <label style={{
+              display: 'block',
+              color: COLORS.text.tertiary,
+              fontSize: '9px',
+              marginBottom: '6px',
+              fontFamily: 'monospace',
+              letterSpacing: '0.05em'
+            }}>
+              INVERT
+            </label>
+            <Toggle
+              checked={layer.invert || false}
+              onChange={(checked) => onUpdate({ ...layer, invert: checked })}
+            />
+          </div>
         </div>
 
         {/* Adjustments Section */}

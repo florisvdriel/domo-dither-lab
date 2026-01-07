@@ -2,12 +2,10 @@
 
 import { useState } from 'react';
 import { PRESETS } from '../../constants/presets/index';
-import { EXPORT_RESOLUTIONS } from '../../constants';
 import Button from './Button';
 import Slider from './CustomSlider';
 import Tooltip from './CustomTooltip';
 import IconButton from './IconButton';
-import { ColorSwatch } from './ColorPicker';
 
 // Simple section header (non-collapsible)
 function SectionHeader({ title }) {
@@ -22,43 +20,6 @@ function SectionHeader({ title }) {
     }}>
       {title}
     </h3>
-  );
-}
-
-// Selector button component for resolution and SVG mode
-function SelectorButton({ selected, onClick, children, style = {} }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        flex: 1,
-        padding: '10px 12px',
-        backgroundColor: 'transparent',
-        border: selected ? 'none' : '1px solid #333',
-        outline: selected ? '1px solid #fff' : 'none',
-        color: selected ? '#fff' : '#666',
-        fontSize: '9px',
-        fontFamily: 'monospace',
-        cursor: 'pointer',
-        transition: 'all 0.12s ease',
-        letterSpacing: '0.05em',
-        ...style
-      }}
-      onMouseEnter={(e) => {
-        if (!selected) {
-          e.target.style.borderColor = '#555';
-          e.target.style.color = '#888';
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!selected) {
-          e.target.style.borderColor = '#333';
-          e.target.style.color = '#666';
-        }
-      }}
-    >
-      {children}
-    </button>
   );
 }
 
@@ -78,19 +39,10 @@ export default function ProjectPropertiesPanel({
   onInkBleedRoughnessChange,
   paperTexture,
   onPaperTextureChange,
-  backgroundColor,
-  onBackgroundColorChange,
-  exportResolution,
-  onExportResolutionChange,
-  onExportPNG,
-  onExportSVGCombined,
-  onExportSVGLayers,
-  palette,
-  colorKeys,
+  onOpenExport,
   hasImage
 }) {
   const [presetTab, setPresetTab] = useState('default');
-  const [svgMode, setSvgMode] = useState('single'); // 'single' or 'separate'
 
   // Get preset entries as array
   const presetEntries = Object.entries(PRESETS);
@@ -303,135 +255,15 @@ export default function ProjectPropertiesPanel({
       }}>
         <SectionHeader title="EXPORT" />
 
-        {/* Background Color Label */}
-        <label style={{
-          display: 'block',
-          color: '#666',
-          fontSize: '10px',
-          marginBottom: '8px',
-          fontFamily: 'monospace',
-          letterSpacing: '0.05em'
-        }}>
-          BACKGROUND
-        </label>
-
-        {/* Palette colors - 4 columns - pass key so background follows palette changes */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(5, 1fr)',
-            gap: '4px',
-            marginBottom: '6px'
-          }}>
-          {colorKeys.map((key) => (
-            <ColorSwatch
-              key={key}
-              color={palette[key]?.hex || '#000000'}
-              selected={backgroundColor === palette[key]?.hex}
-              onClick={() => onBackgroundColorChange(key)}
-              size="100%"
-              style={{ aspectRatio: '1', maxHeight: '32px' }}
-            />
-          ))}
-        </div>
-
-        {/* Black & White - 2 columns, full width */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(2, 1fr)',
-            gap: '6px',
-            marginBottom: '16px'
-          }}>
-          <ColorSwatch
-            color="#000000"
-            selected={backgroundColor === '#000000'}
-            onClick={() => onBackgroundColorChange('#000000')}
-            size="100%"
-            style={{ aspectRatio: '2.5', maxHeight: '32px' }}
-          />
-          <ColorSwatch
-            color="#FFFFFF"
-            selected={backgroundColor === '#FFFFFF' || backgroundColor === '#ffffff'}
-            onClick={() => onBackgroundColorChange('#FFFFFF')}
-            size="100%"
-            style={{ aspectRatio: '2.5', maxHeight: '32px' }}
-          />
-        </div>
-
-        {/* Resolution Label */}
-        <label style={{
-          display: 'block',
-          color: '#666',
-          fontSize: '10px',
-          marginBottom: '8px',
-          fontFamily: 'monospace',
-          letterSpacing: '0.05em'
-        }}>
-          RESOLUTION
-        </label>
-
-        {/* Resolution Selectors */}
-        <div style={{ display: 'flex', gap: '6px', marginBottom: '12px' }}>
-          {Object.entries(EXPORT_RESOLUTIONS).map(([key, { label }]) => (
-            <SelectorButton
-              key={key}
-              selected={exportResolution === key}
-              onClick={() => onExportResolutionChange(key)}
-            >
-              {label}
-            </SelectorButton>
-          ))}
-        </div>
-
-        {/* Export PNG Button */}
         <Button
           primary
-          onClick={onExportPNG}
+          onClick={onOpenExport}
           disabled={!hasImage}
           style={{
-            marginBottom: '16px',
             opacity: hasImage ? 1 : 0.4
           }}
         >
-          EXPORT PNG
-        </Button>
-
-        {/* SVG Export Label */}
-        <label style={{
-          display: 'block',
-          color: '#666',
-          fontSize: '10px',
-          marginBottom: '8px',
-          fontFamily: 'monospace',
-          letterSpacing: '0.05em'
-        }}>
-          SVG EXPORT
-        </label>
-
-        {/* SVG Mode Selectors */}
-        <div style={{ display: 'flex', gap: '6px', marginBottom: '12px' }}>
-          <SelectorButton
-            selected={svgMode === 'single'}
-            onClick={() => setSvgMode('single')}
-          >
-            SINGLE FILE
-          </SelectorButton>
-          <SelectorButton
-            selected={svgMode === 'separate'}
-            onClick={() => setSvgMode('separate')}
-          >
-            SEPARATE LAYERS (ZIP)
-          </SelectorButton>
-        </div>
-
-        {/* Export SVG Button */}
-        <Button
-          onClick={svgMode === 'single' ? onExportSVGCombined : onExportSVGLayers}
-          disabled={!hasImage}
-          style={{ opacity: hasImage ? 1 : 0.4 }}
-        >
-          EXPORT SVG
+          EXPORT
         </Button>
       </div>
     </div>

@@ -30,6 +30,7 @@ export default function RightPanel({
   onExportPNG,
   onExportSVGCombined,
   onExportSVGLayers,
+  onOpenExport,
   palette,
   colorKeys,
   hasImage,
@@ -105,7 +106,7 @@ export default function RightPanel({
             canRemove={totalLayers > 1}
             palette={activePalette}
             colorKeys={colorKeys}
-            onExport={onExportPNG}
+            onExport={onOpenExport}
           />
         ) : null;
       case 'background':
@@ -136,15 +137,7 @@ export default function RightPanel({
             onInkBleedRoughnessChange={onInkBleedRoughnessChange}
             paperTexture={paperTexture}
             onPaperTextureChange={onPaperTextureChange}
-            backgroundColor={backgroundColor}
-            onBackgroundColorChange={onBackgroundColorChange}
-            exportResolution={exportResolution}
-            onExportResolutionChange={onExportResolutionChange}
-            onExportPNG={onExportPNG}
-            onExportSVGCombined={onExportSVGCombined}
-            onExportSVGLayers={onExportSVGLayers}
-            palette={palette}
-            colorKeys={colorKeys}
+            onOpenExport={onOpenExport}
             hasImage={hasImage}
           />
         );

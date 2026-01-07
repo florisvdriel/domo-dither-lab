@@ -27,6 +27,7 @@ import IconButton from './ui/IconButton';
 import DropZone from './ui/DropZone';
 import ComparisonSlider from './ui/ComparisonSlider';
 import SavePresetModal from './ui/SavePresetModal';
+import ExportDialog from './ui/ExportDialog';
 import RightPanel from './ui/RightPanel';
 import CompositionPanel from './ui/CompositionPanel';
 import KeyboardShortcutsDialog from './ui/KeyboardShortcutsDialog';
@@ -87,6 +88,7 @@ export default function HalftoneLab() {
   const [comparisonPosition, setComparisonPosition] = useState(0.5);
   const [customPresets, setCustomPresets] = useState(loadCustomPresets);
   const [showSaveModal, setShowSaveModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
   const [showKeyboardShortcuts, setShowKeyboardShortcuts] = useState(false);
@@ -1412,17 +1414,18 @@ export default function HalftoneLab() {
 
               const darkness = 1 - (ditheredDataArray[si] * inv255);
               if (darkness > minDarkness) {
-                // Knockout: reset to background where this layer has ink
+                // Knockout: reset to background where this layer has ink (skip applying layer color)
                 if (layer.knockout) {
                   baseData[di] = bgR;
                   baseData[di + 1] = bgG;
                   baseData[di + 2] = bgB;
+                } else {
+                  // Apply blend only when not knockout
+                  const alpha = layerOpacity * darkness;
+                  baseData[di] = blendFn(baseData[di], r, alpha);
+                  baseData[di + 1] = blendFn(baseData[di + 1], g, alpha);
+                  baseData[di + 2] = blendFn(baseData[di + 2], b, alpha);
                 }
-                // Apply blend
-                const alpha = layerOpacity * darkness;
-                baseData[di] = blendFn(baseData[di], r, alpha);
-                baseData[di + 1] = blendFn(baseData[di + 1], g, alpha);
-                baseData[di + 2] = blendFn(baseData[di + 2], b, alpha);
               }
             }
           }
@@ -1447,17 +1450,18 @@ export default function HalftoneLab() {
 
               const darkness = 1 - (ditheredDataArray[si] * inv255);
               if (darkness > minDarkness) {
-                // Knockout: reset to background where this layer has ink
+                // Knockout: reset to background where this layer has ink (skip applying layer color)
                 if (layer.knockout) {
                   baseData[di] = bgR;
                   baseData[di + 1] = bgG;
                   baseData[di + 2] = bgB;
+                } else {
+                  // Apply blend only when not knockout
+                  const alpha = layerOpacity * darkness;
+                  baseData[di] = blendFn(baseData[di], r, alpha);
+                  baseData[di + 1] = blendFn(baseData[di + 1], g, alpha);
+                  baseData[di + 2] = blendFn(baseData[di + 2], b, alpha);
                 }
-                // Apply blend
-                const alpha = layerOpacity * darkness;
-                baseData[di] = blendFn(baseData[di], r, alpha);
-                baseData[di + 1] = blendFn(baseData[di + 1], g, alpha);
-                baseData[di + 2] = blendFn(baseData[di + 2], b, alpha);
               }
             }
           }
@@ -2133,6 +2137,7 @@ export default function HalftoneLab() {
         onExportPNG={exportPNG}
         onExportSVGCombined={exportSVGCombined}
         onExportSVGLayers={exportSVGLayers}
+        onOpenExport={() => setShowExportModal(true)}
         palette={palette}
         colorKeys={colorKeys}
         hasImage={!!image}
@@ -2168,6 +2173,19 @@ export default function HalftoneLab() {
         <SavePresetModal
           onSave={saveCustomPreset}
           onCancel={() => setShowSaveModal(false)}
+        />
+      )}
+
+      {showExportModal && (
+        <ExportDialog
+          open={showExportModal}
+          onOpenChange={setShowExportModal}
+          exportResolution={exportResolution}
+          onExportResolutionChange={setExportResolution}
+          onExportPNG={exportPNG}
+          onExportSVGCombined={exportSVGCombined}
+          onExportSVGLayers={exportSVGLayers}
+          hasImage={!!image}
         />
       )}
 

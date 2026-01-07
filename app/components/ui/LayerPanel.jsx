@@ -9,8 +9,9 @@ import AlgorithmSelect from './AlgorithmSelect';
 import Slider from './CustomSlider';
 import CustomSelect from './CustomSelect';
 import { ColorSwatch } from './ColorPicker';
+import Button from './Button';
 
-export default function LayerPanel({ layer, index, totalLayers, onUpdate, onRemove, onDuplicate, onMoveUp, onMoveDown, canRemove, palette = null, onUpdatePaletteColor }) {
+export default function LayerPanel({ layer, index, totalLayers, onUpdate, onRemove, onDuplicate, onMoveUp, onMoveDown, canRemove, palette = null, onUpdatePaletteColor, onExport }) {
   const [expanded, setExpanded] = useState(true);
   const [hovering, setHovering] = useState(false);
   const algoInfo = DITHER_ALGORITHMS[layer.ditherType];
@@ -130,6 +131,13 @@ export default function LayerPanel({ layer, index, totalLayers, onUpdate, onRemo
               </div>
 
               <Slider label={`OPACITY ${Math.round(layer.opacity * 100)}%`} value={layer.opacity} min={0} max={1} step={0.01} onChange={(v) => onUpdate({ ...layer, opacity: v })} debounceMs={30} />
+
+              {/* Export Button */}
+              <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #222' }}>
+                <Button onClick={onExport} primary style={{ width: '100%' }}>
+                  EXPORT
+                </Button>
+              </div>
             </div>
           )}
         </div>
