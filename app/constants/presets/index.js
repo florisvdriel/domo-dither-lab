@@ -1,5 +1,5 @@
 import { DOMO_DEFAULT } from './domo-default';
-import { DOMO_RGB } from './Domo-RGB';
+import { DOMO_RGB } from './domo-rgb';
 import { DOMO_DUOTONE } from './domo-duotone';
 
 // Add new presets here
